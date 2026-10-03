@@ -1,0 +1,9 @@
+# Optional for contributors: `uv run pre-commit install` to enable.
+# Mirrors the Ruff lint + format checks that CI enforces.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
