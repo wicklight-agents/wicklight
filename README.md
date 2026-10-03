@@ -1,5 +1,7 @@
 # wicklight
 
+[![CI](https://github.com/wicklight-agents/wicklight/actions/workflows/ci.yml/badge.svg)](https://github.com/wicklight-agents/wicklight/actions/workflows/ci.yml)
+
 Wicklight is a small, open-source Python harness that is many developers'
 first agent harness: it makes every step observable, every failure debuggable,
 and safety the default. Developers define an agent in one readable file, run it
