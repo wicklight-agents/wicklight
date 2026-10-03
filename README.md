@@ -12,8 +12,6 @@ users to graduate to more advanced harnesses, carrying habits of tracing,
 testing, and least privilege with them. The same engine powers a companion web
 game that teaches agent safety hands-on.
 
-See [`wicklight-solution-brief.md`](./wicklight-solution-brief.md) for the full design.
-
 ## Development
 
 Wicklight uses [uv](https://docs.astral.sh/uv/) for dependency management.

@@ -1,7 +1,7 @@
 """Wicklight — a small, observable, safe-by-default agent harness.
 
 Define an agent in one readable file, run it with full tracing, and deploy it
-with one command. See ``wicklight-solution-brief.md`` for the design.
+with one command.
 """
 
 from __future__ import annotations

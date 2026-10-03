@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Private implementation docs (not part of the repo)
+wicklight-solution-brief.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
