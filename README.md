@@ -19,8 +19,28 @@ Wicklight uses [uv](https://docs.astral.sh/uv/) for dependency management.
 ```bash
 uv sync                       # create the venv and install from uv.lock
 uv run python -c "import wicklight"
-uv run pytest
 ```
 
 Requires Python 3.10+. `uv` will download a suitable interpreter automatically
 if one is not already installed.
+
+### Checks
+
+These three must pass before a change is merged:
+
+```bash
+uv run ruff check             # lint
+uv run pyright                # strict type checking (src/)
+uv run pytest                 # tests with coverage
+```
+
+`uv run ruff format` applies the formatter (`uv run ruff check --fix`
+auto-fixes lint issues).
+
+### Pre-commit hooks (optional)
+
+Contributors can install Git hooks that run Ruff lint + format on commit:
+
+```bash
+uv run pre-commit install
+```
