@@ -1,10 +1,18 @@
 # wicklight
 
-A small, open-source Python harness that makes every agent step observable,
-every failure debuggable, and safety the default. Define an agent in one
-readable file, run it with full tracing, and deploy it with one command.
+Wicklight is a small, open-source Python harness that is many developers'
+first agent harness: it makes every step observable, every failure debuggable,
+and safety the default. Developers define an agent in one readable file, run it
+with full tracing, and deploy it with one command. The harness owns a few
+strict contracts (model providers, tools, policies) so anyone can extend it
+with plugins, while safety enforcement stays fixed in the core.
 
-See [`wicklight-solution-brief.md`](./wicklight-solution-brief.md) for the design.
+It is a learning harness by design. It favors clarity over power, and we expect
+users to graduate to more advanced harnesses, carrying habits of tracing,
+testing, and least privilege with them. The same engine powers a companion web
+game that teaches agent safety hands-on.
+
+See [`wicklight-solution-brief.md`](./wicklight-solution-brief.md) for the full design.
 
 ## Development
 
