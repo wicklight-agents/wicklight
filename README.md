@@ -14,29 +14,39 @@ users to graduate to more advanced harnesses, carrying habits of tracing,
 testing, and least privilege with them. The same engine powers a companion web
 game that teaches agent safety hands-on.
 
-## CLI
+## Getting started
 
-Wicklight installs a `wicklight` command:
+Wicklight isn't on PyPI yet, so install from source. It uses
+[uv](https://docs.astral.sh/uv/) for environment and dependency management —
+`uv` downloads a suitable Python 3.10+ automatically, so that's the only
+prerequisite ([install uv](https://docs.astral.sh/uv/getting-started/installation/)).
 
 ```bash
-wicklight --version           # print the version
-wicklight --help              # list commands
+git clone https://github.com/wicklight-agents/wicklight.git
+cd wicklight
+uv sync                       # create .venv and install from uv.lock
 ```
 
-The `check`, `run`, and `trace` commands are placeholders for now — they are
-implemented in later milestones.
+Then run the CLI with `uv run` (no venv activation needed):
+
+```bash
+uv run wicklight --version    # 0.1.0
+uv run wicklight --help       # list commands
+```
+
+Prefer a bare `wicklight` command? Either activate the venv
+(`source .venv/bin/activate`) or install it as a tool
+(`uv tool install --editable .`).
+
+> **This is the M1 skeleton.** Only `--version` and `--help` work today. The
+> `check`, `run`, and `trace` commands are placeholders that exit with a clear
+> "not implemented yet" message — they land in later milestones (M2 `check`,
+> M3 `trace`, M5 `run`).
 
 ## Development
 
-Wicklight uses [uv](https://docs.astral.sh/uv/) for dependency management.
-
-```bash
-uv sync                       # create the venv and install from uv.lock
-uv run python -c "import wicklight"
-```
-
-Requires Python 3.10+. `uv` will download a suitable interpreter automatically
-if one is not already installed.
+The checks below (and CI) run through the same `uv`-managed environment created
+by `uv sync` above.
 
 ### Checks
 
