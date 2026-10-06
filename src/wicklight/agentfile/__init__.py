@@ -20,6 +20,12 @@ from wicklight.agentfile.config import (
     Sourced,
     build_effective_config,
 )
+from wicklight.agentfile.errors import (
+    AgentFileIssue,
+    AgentFileValidationError,
+    check_agent_file,
+    check_agent_path,
+)
 from wicklight.agentfile.parser import AgentFile, AgentFileError, parse_agent_file
 from wicklight.agentfile.schema import (
     AgentConfig,
@@ -41,6 +47,8 @@ __all__ = [
     "AgentConfig",
     "AgentFile",
     "AgentFileError",
+    "AgentFileIssue",
+    "AgentFileValidationError",
     "Approval",
     "EffectiveConfig",
     "EffectiveLimits",
@@ -55,6 +63,8 @@ __all__ = [
     "ToolSpec",
     "agent_config_json_schema",
     "build_effective_config",
+    "check_agent_file",
+    "check_agent_path",
     "parse_agent_file",
     "validate_frontmatter",
 ]
