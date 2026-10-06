@@ -7,6 +7,19 @@ the model may or may not follow.
 
 from __future__ import annotations
 
+from wicklight.agentfile.config import (
+    DEFAULT_MAX_COST_USD,
+    DEFAULT_MAX_STEPS,
+    DEFAULT_TIMEOUT_SECONDS,
+    UNLISTED_TOOL_LEVEL,
+    EffectiveConfig,
+    EffectiveLimits,
+    EffectiveModels,
+    EffectiveTool,
+    Source,
+    Sourced,
+    build_effective_config,
+)
 from wicklight.agentfile.parser import AgentFile, AgentFileError, parse_agent_file
 from wicklight.agentfile.schema import (
     AgentConfig,
@@ -21,16 +34,27 @@ from wicklight.agentfile.schema import (
 )
 
 __all__ = [
+    "DEFAULT_MAX_COST_USD",
+    "DEFAULT_MAX_STEPS",
+    "DEFAULT_TIMEOUT_SECONDS",
+    "UNLISTED_TOOL_LEVEL",
     "AgentConfig",
     "AgentFile",
     "AgentFileError",
     "Approval",
+    "EffectiveConfig",
+    "EffectiveLimits",
+    "EffectiveModels",
+    "EffectiveTool",
     "Limits",
     "ModelsConfig",
     "PermissionLevel",
     "Route",
+    "Source",
+    "Sourced",
     "ToolSpec",
     "agent_config_json_schema",
+    "build_effective_config",
     "parse_agent_file",
     "validate_frontmatter",
 ]
