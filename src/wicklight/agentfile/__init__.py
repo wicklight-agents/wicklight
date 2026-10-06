@@ -25,8 +25,10 @@ from wicklight.agentfile.errors import (
     AgentFileValidationError,
     check_agent_file,
     check_agent_path,
+    parse_and_validate,
 )
 from wicklight.agentfile.parser import AgentFile, AgentFileError, parse_agent_file
+from wicklight.agentfile.render import render_effective_config
 from wicklight.agentfile.schema import (
     AgentConfig,
     Approval,
@@ -66,5 +68,7 @@ __all__ = [
     "check_agent_file",
     "check_agent_path",
     "parse_agent_file",
+    "parse_and_validate",
+    "render_effective_config",
     "validate_frontmatter",
 ]

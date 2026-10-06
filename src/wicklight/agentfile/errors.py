@@ -57,8 +57,15 @@ class AgentFileValidationError(Exception):
         super().__init__("\n".join(issue.message for issue in issues))
 
 
-def check_agent_file(text: str, *, filename: str = "agent.md") -> AgentConfig:
-    """Parse and validate ``text``, raising with friendly messages on any problem."""
+def parse_and_validate(
+    text: str, *, filename: str = "agent.md"
+) -> tuple[AgentFile, AgentConfig]:
+    """Parse and validate ``text``, returning both the parsed file and config.
+
+    Raises :class:`AgentFileValidationError` with friendly, line-numbered
+    messages on any problem. Callers that need the raw frontmatter (e.g. to
+    build an effective config) use the returned :class:`AgentFile`.
+    """
     try:
         agent = parse_agent_file(text)
     except AgentFileError as exc:
@@ -70,10 +77,17 @@ def check_agent_file(text: str, *, filename: str = "agent.md") -> AgentConfig:
         raise AgentFileValidationError([issue], filename=filename) from exc
 
     try:
-        return validate_frontmatter(agent.frontmatter)
+        config = validate_frontmatter(agent.frontmatter)
     except ValidationError as exc:
         issues = _issues_from_validation(exc, agent, filename=filename)
         raise AgentFileValidationError(issues, filename=filename) from exc
+
+    return agent, config
+
+
+def check_agent_file(text: str, *, filename: str = "agent.md") -> AgentConfig:
+    """Parse and validate ``text``, raising with friendly messages on any problem."""
+    return parse_and_validate(text, filename=filename)[1]
 
 
 def check_agent_path(path: str | Path) -> AgentConfig:
