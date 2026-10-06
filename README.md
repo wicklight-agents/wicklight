@@ -30,18 +30,35 @@ uv sync                       # create .venv and install from uv.lock
 Then run the CLI with `uv run` (no venv activation needed):
 
 ```bash
-uv run wicklight --version    # 0.1.0
-uv run wicklight --help       # list commands
+uv run wicklight --version              # 0.1.0
+uv run wicklight --help                 # list commands
+uv run wicklight check examples/inbox.md  # validate an agent file
 ```
 
 Prefer a bare `wicklight` command? Either activate the venv
 (`source .venv/bin/activate`) or install it as a tool
 (`uv tool install --editable .`).
 
-> **This is the M1 skeleton.** Only `--version` and `--help` work today. The
-> `check`, `run`, and `trace` commands are placeholders that exit with a clear
-> "not implemented yet" message — they land in later milestones (M2 `check`,
-> M3 `trace`, M5 `run`).
+> **Early days.** `check` validates an agent file and prints its effective
+> config. `run` and `trace` are still placeholders that exit with a clear "not
+> implemented yet" message — they land in later milestones (M3 `trace`, M5
+> `run`).
+
+## Examples
+
+Commented example agent files live in [`examples/`](./examples). Each teaches
+one concept and passes `wicklight check`:
+
+- [`inbox.md`](./examples/inbox.md) — read an inbox and draft replies; send
+  email only to a recipient allowlist, with approval.
+- [`files.md`](./examples/files.md) — read-only file access confined to a path
+  allowlist (least privilege).
+- [`payments.md`](./examples/payments.md) — an irreversible `make_payment` tool
+  behind an approval gate, plus a spend cap.
+
+```bash
+uv run wicklight check examples/payments.md
+```
 
 ## Development
 
