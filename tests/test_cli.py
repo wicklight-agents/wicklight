@@ -31,7 +31,8 @@ def test_no_args_shows_help() -> None:
     assert "Usage" in result.output
 
 
-@pytest.mark.parametrize("command", ["check", "run", "trace"])
+# `check` is implemented (DTN-197); `run` and `trace` remain placeholders.
+@pytest.mark.parametrize("command", ["run", "trace"])
 def test_placeholder_command_fails_loudly(command: str) -> None:
     result = runner.invoke(app, [command])
     assert result.exit_code == 1
