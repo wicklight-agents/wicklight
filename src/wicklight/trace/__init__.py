@@ -42,6 +42,12 @@ from wicklight.trace.events import (
     parse_trace_event,
     trace_event_adapter,
 )
+from wicklight.trace.reader import (
+    Trace,
+    TraceIssue,
+    TraceReadError,
+    read_trace,
+)
 from wicklight.trace.writer import (
     DEFAULT_BLOB_THRESHOLD,
     Redactor,
@@ -80,9 +86,13 @@ __all__ = [
     "ToolExecutedPayload",
     "ToolProposed",
     "ToolProposedPayload",
+    "Trace",
     "TraceEvent",
+    "TraceIssue",
+    "TraceReadError",
     "TraceWriter",
     "dump_trace_event",
     "parse_trace_event",
+    "read_trace",
     "trace_event_adapter",
 ]
