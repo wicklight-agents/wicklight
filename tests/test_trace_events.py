@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -42,7 +42,7 @@ from wicklight.trace import (
     parse_trace_event,
 )
 
-TS = datetime(2026, 10, 6, 12, 0, 0, tzinfo=UTC)
+TS = datetime(2026, 10, 6, 12, 0, 0, tzinfo=timezone.utc)
 RUN = "run_abc123"
 
 
