@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from typer.testing import CliRunner
 
 from wicklight import __version__
@@ -31,9 +30,8 @@ def test_no_args_shows_help() -> None:
     assert "Usage" in result.output
 
 
-# `check` is implemented (DTN-197); `run` and `trace` remain placeholders.
-@pytest.mark.parametrize("command", ["run", "trace"])
-def test_placeholder_command_fails_loudly(command: str) -> None:
-    result = runner.invoke(app, [command])
+# `check` (DTN-197) and `trace` (DTN-202) are implemented; `run` is a placeholder.
+def test_placeholder_command_fails_loudly() -> None:
+    result = runner.invoke(app, ["run"])
     assert result.exit_code == 1
     assert "not implemented" in result.output
