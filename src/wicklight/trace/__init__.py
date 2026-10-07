@@ -42,8 +42,14 @@ from wicklight.trace.events import (
     parse_trace_event,
     trace_event_adapter,
 )
+from wicklight.trace.writer import (
+    DEFAULT_BLOB_THRESHOLD,
+    Redactor,
+    TraceWriter,
+)
 
 __all__ = [
+    "DEFAULT_BLOB_THRESHOLD",
     "TRACE_FORMAT_VERSION",
     "ApprovalRequested",
     "ApprovalRequestedPayload",
@@ -64,6 +70,7 @@ __all__ = [
     "ModelRoutedPayload",
     "PolicyChecked",
     "PolicyCheckedPayload",
+    "Redactor",
     "RunFinished",
     "RunFinishedPayload",
     "RunStarted",
@@ -74,6 +81,7 @@ __all__ = [
     "ToolProposed",
     "ToolProposedPayload",
     "TraceEvent",
+    "TraceWriter",
     "dump_trace_event",
     "parse_trace_event",
     "trace_event_adapter",
