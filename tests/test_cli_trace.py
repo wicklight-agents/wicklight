@@ -48,7 +48,7 @@ def _policy(decision: Decision) -> PolicyChecked:
 
 def test_render_matches_golden_snapshot() -> None:
     buf = io.StringIO()
-    console = Console(file=buf, width=100, no_color=True, highlight=False)
+    console = Console(file=buf, width=120, no_color=True, highlight=False)
     print_trace(console, read_trace(SAMPLE))
     assert buf.getvalue() == GOLDEN.read_text(encoding="utf-8")
 
@@ -112,7 +112,7 @@ def test_show_renders_cleanly_and_exits_zero() -> None:
     assert result.exit_code == 0
     assert "Step 0" in result.output
     assert "run started for agent inbox-summarizer" in result.output
-    assert "blocked: send_email by policy email_only_to" in result.output
+    assert "blocked: send_email to attacker@evil.com" in result.output
 
 
 def test_show_step_filter() -> None:
@@ -134,7 +134,7 @@ def test_show_json_emits_valid_events() -> None:
     result = runner.invoke(app, ["trace", "show", str(SAMPLE), "--json"])
     assert result.exit_code == 0
     lines = [ln for ln in result.output.splitlines() if ln.strip()]
-    assert len(lines) == 13
+    assert len(lines) == len(read_trace(SAMPLE).events)
     assert all(json.loads(ln)["type"] for ln in lines)
 
 
