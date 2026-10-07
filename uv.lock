@@ -721,6 +721,7 @@ name = "wicklight"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
+    { name = "rich" },
     { name = "ruamel-yaml" },
     { name = "typer" },
 ]
@@ -737,6 +738,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "rich", specifier = ">=13" },
     { name = "ruamel-yaml", specifier = ">=0.18" },
     { name = "typer", specifier = ">=0.12" },
 ]
