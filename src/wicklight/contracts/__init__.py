@@ -24,18 +24,27 @@ from wicklight.contracts.models import (
     model_event_adapter,
     parse_model_event,
 )
-
-#: Version of the provider/tool/policy contract these neutral types belong to.
-#: Follows semantic versioning; the previous major is supported for 6 months
-#: after a new one ships.
-CONTRACT_VERSION = "1.0"
+from wicklight.contracts.provider import (
+    PROVIDER_ENTRY_POINT_GROUP,
+    Capabilities,
+    Provider,
+    ProviderError,
+    ProviderRegistry,
+    check_contract_version,
+)
+from wicklight.contracts.version import CONTRACT_VERSION
 
 __all__ = [
     "CONTRACT_VERSION",
+    "PROVIDER_ENTRY_POINT_GROUP",
+    "Capabilities",
     "Message",
     "ModelEvent",
     "ModelRequest",
     "ModelResponse",
+    "Provider",
+    "ProviderError",
+    "ProviderRegistry",
     "Role",
     "StopReason",
     "StreamDone",
@@ -44,6 +53,7 @@ __all__ = [
     "ToolCallDelta",
     "ToolDefinition",
     "Usage",
+    "check_contract_version",
     "dump_model_event",
     "model_event_adapter",
     "parse_model_event",
