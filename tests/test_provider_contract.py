@@ -111,9 +111,9 @@ def test_unsupported_major_version_fails_at_load() -> None:
         _registry(future=FutureProvider)
 
 
-def test_discover_without_registered_plugins_is_empty() -> None:
-    # No wicklight.providers entry points are registered in the dev environment.
-    assert ProviderRegistry.discover().names() == []
+def test_discover_finds_registered_fake_provider() -> None:
+    # The FakeProvider (DTN-206) is registered under the `fake` entry point.
+    assert "fake" in ProviderRegistry.discover().names()
 
 
 @pytest.mark.parametrize("version", ["1.0", "1.9", "0.9"])
