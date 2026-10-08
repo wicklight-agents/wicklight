@@ -78,13 +78,27 @@ class ToolResult(BaseModel):
 
 @runtime_checkable
 class Tool(Protocol):
-    """A named action with a typed input schema and a declared risk level."""
+    """A named action with a typed input schema and a declared risk level.
 
-    name: str
-    description: str
-    risk: ToolRisk
-    network_hosts: list[str]
-    input_model: type[BaseModel]
+    The declaration attributes are read-only properties so that implementations
+    are free to provide them as class attributes, ClassVars, or instance
+    attributes, and to narrow ``input_model`` to their concrete schema.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def description(self) -> str: ...
+
+    @property
+    def risk(self) -> ToolRisk: ...
+
+    @property
+    def network_hosts(self) -> list[str]: ...
+
+    @property
+    def input_model(self) -> type[BaseModel]: ...
 
     def is_sensitive(self, tool_input: BaseModel) -> bool: ...
 
