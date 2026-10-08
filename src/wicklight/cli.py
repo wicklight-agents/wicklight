@@ -14,6 +14,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from wicklight import __version__
 from wicklight.agentfile import (
@@ -22,6 +23,7 @@ from wicklight.agentfile import (
     parse_and_validate,
     render_effective_config,
 )
+from wicklight.contracts import Capabilities, describe_providers
 from wicklight.trace import TraceReadError, dump_trace_event, read_trace
 from wicklight.trace.console import filter_events, print_trace
 
@@ -127,6 +129,59 @@ def trace_show(
         return
 
     print_trace(Console(), trace, step=step, event_type=event_type)
+
+
+providers_app = typer.Typer(
+    name="providers", help="Inspect installed provider plugins.", no_args_is_help=True
+)
+app.add_typer(providers_app)
+
+_STATUS_COLORS = {
+    "ok": "green",
+    "deprecated": "yellow",
+    "unsupported": "red",
+    "error": "red",
+}
+
+
+@providers_app.command("list")
+def providers_list() -> None:
+    """List installed provider plugins, their versions, and capabilities."""
+    infos = describe_providers()
+    console = Console()
+    if not infos:
+        console.print("No providers are installed.")
+        return
+
+    table = Table(title="Installed providers")
+    for column in ("name", "package", "version", "contract", "status", "capabilities"):
+        table.add_column(column)
+    for info in infos:
+        color = _STATUS_COLORS.get(info.status, "white")
+        table.add_row(
+            info.name,
+            info.package or "—",
+            info.package_version or "—",
+            info.contract_version or "—",
+            f"[{color}]{info.status}[/]",
+            _capabilities_summary(info.capabilities),
+        )
+    console.print(table)
+
+
+def _capabilities_summary(capabilities: Capabilities | None) -> str:
+    if capabilities is None:
+        return "—"
+    parts: list[str] = []
+    if capabilities.streaming:
+        parts.append("streaming")
+    if capabilities.parallel_tool_calls:
+        parts.append("parallel-tools")
+    if capabilities.structured_output:
+        parts.append("structured-output")
+    if capabilities.max_context_tokens is not None:
+        parts.append(f"ctx={capabilities.max_context_tokens}")
+    return ", ".join(parts) or "—"
 
 
 def main() -> None:

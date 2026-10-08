@@ -10,6 +10,7 @@ files then refer to models as ``provider/model`` (e.g. ``anthropic/claude-sonnet
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterable
+from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
 from typing import Protocol, runtime_checkable
 
@@ -53,29 +54,50 @@ class Provider(Protocol):
         ...
 
 
+def classify_contract_version(version: str) -> tuple[str, str]:
+    """Classify a contract version as ``ok``, ``deprecated``, or ``unsupported``.
+
+    The current major is ``ok``; the one before it is ``deprecated`` (still
+    supported for six months after a new major ships); anything else is
+    ``unsupported``. Returns the status and a human-readable detail (empty when
+    ``ok``).
+    """
+    try:
+        plugin_major = int(version.split(".", 1)[0])
+    except ValueError:
+        return "unsupported", f"invalid contract version {version!r}"
+
+    current_major = int(CONTRACT_VERSION.split(".", 1)[0])
+    if plugin_major > current_major:
+        return (
+            "unsupported",
+            f"plugin targets contract v{version}, newer than this harness's "
+            f"v{CONTRACT_VERSION}; upgrade wicklight",
+        )
+    if current_major - plugin_major == 0:
+        return "ok", ""
+    if current_major - plugin_major == 1:
+        return (
+            "deprecated",
+            f"plugin targets the previous major v{version}; upgrade before "
+            f"support ends (six months after a new major ships)",
+        )
+    return (
+        "unsupported",
+        f"plugin targets contract v{version}, which is no longer supported "
+        f"(harness is v{CONTRACT_VERSION})",
+    )
+
+
 def check_contract_version(version: str) -> None:
     """Validate a plugin's contract version against the harness, or raise.
 
     The current major and the one before it are supported (the previous major
     for six months after a new one ships).
     """
-    try:
-        plugin_major = int(version.split(".", 1)[0])
-    except ValueError as exc:
-        raise ProviderError(f"invalid contract version {version!r}") from exc
-
-    current_major = int(CONTRACT_VERSION.split(".", 1)[0])
-    if plugin_major > current_major:
-        raise ProviderError(
-            f"plugin targets contract v{version}, newer than this harness's "
-            f"v{CONTRACT_VERSION}; upgrade wicklight"
-        )
-    if current_major - plugin_major > 1:
-        raise ProviderError(
-            f"plugin targets contract v{version}, which is no longer supported "
-            f"(harness is v{CONTRACT_VERSION}; the previous major is supported "
-            f"for six months)"
-        )
+    status, detail = classify_contract_version(version)
+    if status == "unsupported":
+        raise ProviderError(detail)
 
 
 class ProviderRegistry:
@@ -127,3 +149,70 @@ def _load_provider(ep: EntryPoint) -> Provider:
     obj = ep.load()
     # A plugin may register a Provider instance or a no-arg Provider class.
     return obj() if isinstance(obj, type) else obj
+
+
+@dataclass(frozen=True)
+class ProviderInfo:
+    """A description of one registered provider, for listing to a user."""
+
+    name: str
+    package: str | None
+    package_version: str | None
+    contract_version: str | None
+    capabilities: Capabilities | None
+    status: str  # "ok" | "deprecated" | "unsupported" | "error"
+    detail: str = ""
+
+
+def describe_providers(
+    entry_points_: Iterable[EntryPoint] | None = None,
+) -> list[ProviderInfo]:
+    """Describe every registered provider, tolerating ones that fail to load.
+
+    Unlike :meth:`ProviderRegistry.discover`, this never raises on a bad plugin:
+    load failures and unsupported versions are reported as a status so the whole
+    listing can be shown.
+    """
+    eps = (
+        entry_points(group=PROVIDER_ENTRY_POINT_GROUP)
+        if entry_points_ is None
+        else entry_points_
+    )
+    infos: list[ProviderInfo] = []
+    for ep in eps:
+        package, package_version = _distribution_of(ep)
+        try:
+            provider = _load_provider(ep)
+        except Exception as exc:  # noqa: BLE001 - surfaced in the listing, not swallowed
+            infos.append(
+                ProviderInfo(
+                    name=ep.name,
+                    package=package,
+                    package_version=package_version,
+                    contract_version=None,
+                    capabilities=None,
+                    status="error",
+                    detail=str(exc),
+                )
+            )
+            continue
+        status, detail = classify_contract_version(provider.contract_version)
+        infos.append(
+            ProviderInfo(
+                name=ep.name,
+                package=package,
+                package_version=package_version,
+                contract_version=provider.contract_version,
+                capabilities=provider.capabilities,
+                status=status,
+                detail=detail,
+            )
+        )
+    return sorted(infos, key=lambda info: info.name)
+
+
+def _distribution_of(ep: EntryPoint) -> tuple[str | None, str | None]:
+    dist = getattr(ep, "dist", None)
+    if dist is None:
+        return None, None
+    return getattr(dist, "name", None), getattr(dist, "version", None)
