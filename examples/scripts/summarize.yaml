@@ -1,0 +1,17 @@
+# A fake-provider script for the inbox-summarizer agent.
+#
+# Each entry is one model response, replayed in order. Run it with the fake
+# provider (e.g. a model id of `fake/summarize`): the first response asks to
+# read the inbox, and after the tool result comes back the second response
+# writes the summary.
+responses:
+  # Step 1: the model decides to read the inbox before summarizing.
+  - text: "Let me read this week's inbox first."
+    tool_calls:
+      - name: read_inbox
+        arguments: {}
+
+  # Step 2: with the inbox contents available, it writes the summary.
+  - text: >-
+      This week you received 5 emails. Two need replies (from Amy and Sam),
+      one is a newsletter, and two are receipts. Want me to draft the replies?

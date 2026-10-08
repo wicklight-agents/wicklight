@@ -33,6 +33,9 @@ Issues = "https://github.com/wicklight-agents/wicklight/issues"
 [project.scripts]
 wicklight = "wicklight.cli:main"
 
+[project.entry-points."wicklight.providers"]
+fake = "wicklight.providers.fake:FakeProvider"
+
 [dependency-groups]
 dev = [
     "pytest>=8",
