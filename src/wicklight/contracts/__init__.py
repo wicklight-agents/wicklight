@@ -35,12 +35,25 @@ from wicklight.contracts.provider import (
     classify_contract_version,
     describe_providers,
 )
+from wicklight.contracts.tool import (
+    TOOL_ENTRY_POINT_GROUP,
+    FunctionTool,
+    Tool,
+    ToolContext,
+    ToolError,
+    ToolRegistry,
+    ToolResult,
+    ToolRisk,
+    tool,
+)
 from wicklight.contracts.version import CONTRACT_VERSION
 
 __all__ = [
     "CONTRACT_VERSION",
     "PROVIDER_ENTRY_POINT_GROUP",
+    "TOOL_ENTRY_POINT_GROUP",
     "Capabilities",
+    "FunctionTool",
     "Message",
     "ModelEvent",
     "ModelRequest",
@@ -53,9 +66,15 @@ __all__ = [
     "StopReason",
     "StreamDone",
     "TextDelta",
+    "Tool",
     "ToolCall",
     "ToolCallDelta",
+    "ToolContext",
     "ToolDefinition",
+    "ToolError",
+    "ToolRegistry",
+    "ToolResult",
+    "ToolRisk",
     "Usage",
     "check_contract_version",
     "classify_contract_version",
@@ -63,4 +82,5 @@ __all__ = [
     "dump_model_event",
     "model_event_adapter",
     "parse_model_event",
+    "tool",
 ]
