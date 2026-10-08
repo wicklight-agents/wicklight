@@ -15,6 +15,7 @@ from wicklight.testing.conformance import (
     Scenario,
     run_provider_conformance,
 )
+from wicklight.testing.tool_conformance import run_tool_conformance
 
 __all__ = [
     "CheckResult",
@@ -23,4 +24,5 @@ __all__ = [
     "ConformanceReport",
     "Scenario",
     "run_provider_conformance",
+    "run_tool_conformance",
 ]
