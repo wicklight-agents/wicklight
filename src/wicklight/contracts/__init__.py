@@ -29,8 +29,11 @@ from wicklight.contracts.provider import (
     Capabilities,
     Provider,
     ProviderError,
+    ProviderInfo,
     ProviderRegistry,
     check_contract_version,
+    classify_contract_version,
+    describe_providers,
 )
 from wicklight.contracts.version import CONTRACT_VERSION
 
@@ -44,6 +47,7 @@ __all__ = [
     "ModelResponse",
     "Provider",
     "ProviderError",
+    "ProviderInfo",
     "ProviderRegistry",
     "Role",
     "StopReason",
@@ -54,6 +58,8 @@ __all__ = [
     "ToolDefinition",
     "Usage",
     "check_contract_version",
+    "classify_contract_version",
+    "describe_providers",
     "dump_model_event",
     "model_event_adapter",
     "parse_model_event",
