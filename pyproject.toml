@@ -36,6 +36,9 @@ wicklight = "wicklight.cli:main"
 [project.entry-points."wicklight.providers"]
 fake = "wicklight.providers.fake:FakeProvider"
 
+[project.entry-points.pytest11]
+wicklight_conformance = "wicklight._pytest_plugin"
+
 [dependency-groups]
 dev = [
     "pytest>=8",
