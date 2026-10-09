@@ -64,6 +64,24 @@ def filter_events(
     return result
 
 
+class StepPrinter:
+    """Prints events one at a time with a step header, for live `run --trace`.
+
+    Stateful so it only prints a ``Step N`` header when the step changes, giving
+    the same grouped look as :func:`print_trace` as events stream in.
+    """
+
+    def __init__(self, console: Console) -> None:
+        self._console = console
+        self._step: int | None = None
+
+    def __call__(self, event: TraceEvent) -> None:
+        if event.step != self._step:
+            self._step = event.step
+            self._console.print(f"Step {event.step}", style="bold")
+        self._console.print(render_event(event))
+
+
 def print_trace(
     console: Console,
     trace: Trace,

@@ -14,7 +14,7 @@ provider, tools, a seeded world, or an approver without an agent-file change.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
@@ -24,7 +24,7 @@ from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import Provider, ProviderRegistry, Tool, ToolRegistry
 from wicklight.core import RunResult, ToolCheck, run_agent
 from wicklight.tools import MockWorld, mock_tools
-from wicklight.trace import TraceWriter
+from wicklight.trace import TraceEvent, TraceWriter
 
 __all__ = ["Agent", "RunResult"]
 
@@ -59,6 +59,7 @@ class Agent:
         world: MockWorld | None = None,
         approver: object | None = None,
         checks: Sequence[ToolCheck] = (),
+        on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
     ) -> RunResult:
@@ -79,6 +80,7 @@ class Agent:
                 writer=writer,
                 checks=checks,
                 agent_file=self._agent_file,
+                on_event=on_event,
             )
 
     def run(
@@ -90,6 +92,7 @@ class Agent:
         world: MockWorld | None = None,
         approver: object | None = None,
         checks: Sequence[ToolCheck] = (),
+        on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
     ) -> RunResult:
@@ -109,6 +112,7 @@ class Agent:
                     world=world,
                     approver=approver,
                     checks=checks,
+                    on_event=on_event,
                     run_id=run_id,
                     runs_dir=runs_dir,
                 )
