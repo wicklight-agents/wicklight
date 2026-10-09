@@ -33,9 +33,11 @@ output, usage).
 
 Each iteration is one step:
 
-1. **Step budget.** If the step number exceeds `max_steps`, emit a `limit_hit`
-   event and stop with status `limit`. This guarantees the loop always
-   terminates. (DTN-212 adds cost and time limits alongside this.)
+1. **Limits.** Before anything else, the fixed limit checks run: wall-clock
+   `timeout`, `max_steps`, and (after the model call) `max_cost` from the
+   accumulated `Usage`. Hitting any one emits a `limit_hit` event and stops the
+   run cleanly with status `limit`, so the loop always terminates. These are
+   fixed in the core; a plugin cannot remove them.
 2. **Build context** (`context_built`). The messages are the system
    instructions, the user's task, then the conversation so far (assistant turns
    and tool results). Tool results are tagged `trusted=False`.
@@ -53,15 +55,17 @@ Each iteration is one step:
 
 ## `_handle_call(...)` — the one place tools run
 
-1. **Resolve** the tool by name. An unknown tool is not a crash: record a failed
-   `tool_executed` and return a structured failure the model can react to.
+1. **Permission check (fixed, always first).** A call is blocked if the tool is
+   not listed in the agent file (tools are off unless listed), is listed as
+   `off`, is unknown, or its declared risk exceeds the granted level
+   (`off < read < write < irreversible`). A block emits a `policy_checked` deny
+   with the reason and the agent-file line, and returns a failure to the model —
+   the tool is **never executed**. Plugins cannot remove or reorder this check.
 2. **Validate** the arguments against the tool's `input_model`. Invalid
-   arguments are likewise returned to the model as a structured failure.
-3. **Check pipeline.** Run each check in order. A check may record its own trace
-   events (a policy denial, a limit, an approval) and returns allow/deny. The
-   first denial blocks the call — the tool is **never executed** — and a failure
-   is returned to the model. This is the seam permission checks (DTN-212),
-   policies (M6), and approvals (M7) plug into; by default there are no checks.
+   arguments are returned to the model as a structured failure.
+3. **Plugin checks.** Any additional checks run in order (policies in M6,
+   approvals in M7); the first denial blocks the call the same way. By default
+   there are none.
 4. **Execute** the tool and record `tool_executed` with its result and duration.
    If a tool misbehaves and raises, that is surfaced to the model as a failure
    rather than taking down the run.

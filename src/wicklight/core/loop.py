@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, ValidationError
 
+from wicklight.agentfile import AgentFile, PermissionLevel
 from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import (
     Message,
@@ -34,11 +35,13 @@ from wicklight.contracts import (
     ToolContext,
     ToolDefinition,
     ToolResult,
+    ToolRisk,
     Usage,
 )
 from wicklight.trace import (
     ContextBuilt,
     ContextBuiltPayload,
+    Decision,
     ErrorEvent,
     ErrorPayload,
     LimitHit,
@@ -49,6 +52,8 @@ from wicklight.trace import (
     ModelRespondedPayload,
     ModelRouted,
     ModelRoutedPayload,
+    PolicyChecked,
+    PolicyCheckedPayload,
     RunFinished,
     RunFinishedPayload,
     RunStarted,
@@ -61,6 +66,21 @@ from wicklight.trace import (
     TraceEvent,
     TraceWriter,
 )
+
+# Permission levels and tool risks share this ordering (off < read < write <
+# irreversible). A call is allowed only when the granted level is at least the
+# tool's declared risk.
+_LEVEL_RANK = {
+    PermissionLevel.OFF: 0,
+    PermissionLevel.READ: 1,
+    PermissionLevel.WRITE: 2,
+    PermissionLevel.IRREVERSIBLE: 3,
+}
+_RISK_RANK = {
+    ToolRisk.READ: 1,
+    ToolRisk.WRITE: 2,
+    ToolRisk.IRREVERSIBLE: 3,
+}
 
 
 def _now() -> datetime:
@@ -142,13 +162,17 @@ async def run_agent(
     writer: TraceWriter,
     checks: Sequence[ToolCheck] = (),
     ctx: ToolContext | None = None,
+    agent_file: AgentFile | None = None,
 ) -> RunResult:
     """Run an agent to completion, recording every step to the trace."""
     log = TraceLog(writer, run_id)
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
     model_id = config.models.default.value
     max_steps = config.limits.max_steps.value
+    max_cost = config.limits.max_cost.value
+    timeout = config.limits.timeout.value
     tool_defs = _tool_definitions(tools)
+    started = time.perf_counter()
 
     log.emit(
         RunStarted,
@@ -165,7 +189,18 @@ async def run_agent(
 
     while True:
         step += 1
-        # Stop if the run has used up its step budget.
+        # Limits are fixed in the core and checked every step. Any one stops the
+        # run cleanly with a limit_hit event.
+        elapsed = time.perf_counter() - started
+        if elapsed > timeout:
+            log.emit(
+                LimitHit,
+                step,
+                f"hit limit timeout ({timeout:g}s)",
+                LimitHitPayload(limit="timeout", limit_value=timeout, observed=elapsed),
+            )
+            status = RunStatus.LIMIT
+            break
         if step > max_steps:
             log.emit(
                 LimitHit,
@@ -224,6 +259,18 @@ async def run_agent(
             _responded_payload(model_id, response),
         )
 
+        if usage.cost_usd is not None and usage.cost_usd > max_cost:
+            log.emit(
+                LimitHit,
+                step,
+                f"hit limit max_cost (${max_cost:.2f})",
+                LimitHitPayload(
+                    limit="max_cost", limit_value=max_cost, observed=usage.cost_usd
+                ),
+            )
+            status = RunStatus.LIMIT
+            break
+
         # The model's turn is part of the history either way.
         history.append(Message(role=Role.ASSISTANT, content=response.content))
 
@@ -243,7 +290,9 @@ async def run_agent(
                     tool=call.name, call_id=call.id, arguments=call.arguments
                 ),
             )
-            result = await _handle_call(call, tools, checks, config, ctx, log, step)
+            result = await _handle_call(
+                call, tools, checks, config, ctx, log, step, agent_file
+            )
             history.append(
                 Message(
                     role=Role.TOOL,
@@ -273,10 +322,14 @@ async def _handle_call(
     ctx: ToolContext,
     log: TraceLog,
     step: int,
+    agent_file: AgentFile | None,
 ) -> ToolResult:
-    tool = tools.get(call.name)
-    if tool is None:
-        return _failed(log, step, call, f"unknown tool: {call.name}")
+    # The permission check is fixed in the core and always runs first; plugin
+    # checks cannot remove or reorder it.
+    permission = _check_permission(call, tools, config, agent_file, log, step)
+    if not permission.allowed:
+        return ToolResult.failure(f"blocked: {permission.reason}")
+    tool = tools[call.name]  # the permission check confirmed it is present
 
     try:
         tool_input = tool.input_model.model_validate(call.arguments)
@@ -284,8 +337,8 @@ async def _handle_call(
         detail = exc.errors()[0]["msg"]
         return _failed(log, step, call, f"invalid arguments for {call.name}: {detail}")
 
-    # Run the check pipeline (permissions, limits, policies, approvals). A
-    # denied call is never executed; the check records why in the trace.
+    # Then any plugin checks (policies in M6, approvals in M7). A denied call is
+    # never executed; the check records why in the trace.
     proposed = ProposedCall(call, tool, tool_input, step, config, log)
     for check in checks:
         outcome = await check(proposed)
@@ -318,6 +371,67 @@ def _failed(log: TraceLog, step: int, call: ToolCall, error: str) -> ToolResult:
         ToolExecutedPayload(tool=call.name, call_id=call.id, ok=False),
     )
     return ToolResult.failure(error)
+
+
+def _check_permission(
+    call: ToolCall,
+    tools: Mapping[str, Tool],
+    config: EffectiveConfig,
+    agent_file: AgentFile | None,
+    log: TraceLog,
+    step: int,
+) -> CheckOutcome:
+    """The fixed permission check: tools are off unless granted a high enough level."""
+    source = _permission_source(agent_file, call.name)
+    granted = config.tools.get(call.name)
+    if granted is None:
+        reason = f"tool '{call.name}' is not listed in the agent file (tools are off)"
+        return _deny(log, step, call, reason, source)
+
+    level = granted.level.value
+    if level is PermissionLevel.OFF:
+        return _deny(log, step, call, f"tool '{call.name}' is turned off", source)
+
+    tool = tools.get(call.name)
+    if tool is None:
+        return _deny(log, step, call, f"unknown tool '{call.name}'", source)
+
+    if _RISK_RANK[tool.risk] > _LEVEL_RANK[level]:
+        reason = (
+            f"tool '{call.name}' needs '{tool.risk.value}' but is granted "
+            f"'{level.value}'"
+        )
+        return _deny(log, step, call, reason, source)
+
+    return CheckOutcome(allowed=True)
+
+
+def _deny(
+    log: TraceLog, step: int, call: ToolCall, reason: str, source: str | None
+) -> CheckOutcome:
+    log.emit(
+        PolicyChecked,
+        step,
+        f"blocked: {call.name} by permissions — {reason}",
+        PolicyCheckedPayload(
+            tool=call.name,
+            policy="permission",
+            decision=Decision.DENY,
+            reason=reason,
+            source=source,
+        ),
+    )
+    return CheckOutcome(allowed=False, reason=reason)
+
+
+def _permission_source(agent_file: AgentFile | None, tool_name: str) -> str | None:
+    if agent_file is None:
+        return None
+    line = agent_file.line_of("tools", tool_name)
+    if line is None:
+        return None
+    filename = agent_file.path.name if agent_file.path else "agent.md"
+    return f"{filename} line {line}"
 
 
 def _tool_definitions(tools: Mapping[str, Tool]) -> list[ToolDefinition]:

@@ -18,6 +18,7 @@ models:
   default: fake/demo
 tools:
   read_inbox: read
+  read_file: read
   send_email: { level: write }
 limits: { max_steps: 10 }
 ---
