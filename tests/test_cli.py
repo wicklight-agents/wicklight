@@ -28,10 +28,3 @@ def test_no_args_shows_help() -> None:
     # no_args_is_help prints usage and signals "no command given" (exit 2).
     assert result.exit_code == 2
     assert "Usage" in result.output
-
-
-# `check` (DTN-197) and `trace` (DTN-202) are implemented; `run` is a placeholder.
-def test_placeholder_command_fails_loudly() -> None:
-    result = runner.invoke(app, ["run"])
-    assert result.exit_code == 1
-    assert "not implemented" in result.output

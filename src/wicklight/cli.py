@@ -2,8 +2,8 @@
 
 This module defines the Typer application exposed as the ``wicklight`` console
 script (see ``[project.scripts]`` in ``pyproject.toml``). It provides
-``--version`` and ``--help``, the ``check`` command, the ``trace`` command
-group, and a ``run`` placeholder that fails loudly until M5 lands.
+``--version`` and ``--help``, the ``check`` and ``run`` commands, and the
+``trace`` and ``providers`` command groups.
 """
 
 from __future__ import annotations
@@ -17,15 +17,18 @@ from rich.console import Console
 from rich.table import Table
 
 from wicklight import __version__
+from wicklight.agent import Agent
 from wicklight.agentfile import (
     AgentFileValidationError,
     build_effective_config,
     parse_and_validate,
     render_effective_config,
 )
-from wicklight.contracts import Capabilities, describe_providers
+from wicklight.contracts import Capabilities, ProviderError, describe_providers
+from wicklight.providers import FakeProvider, FakeScript
+from wicklight.tools import MockWorld
 from wicklight.trace import TraceReadError, dump_trace_event, read_trace
-from wicklight.trace.console import filter_events, print_trace
+from wicklight.trace.console import StepPrinter, filter_events, print_trace
 
 app = typer.Typer(
     name="wicklight",
@@ -39,12 +42,6 @@ def _version_callback(*, value: bool) -> None:
     if value:
         typer.echo(__version__)
         raise typer.Exit
-
-
-def _not_implemented(command: str) -> None:
-    """Report that a command exists but is not implemented yet, and exit 1."""
-    typer.echo(f"`wicklight {command}` is not implemented yet.", err=True)
-    raise typer.Exit(code=1)
 
 
 @app.callback()
@@ -92,9 +89,64 @@ def check(
 
 
 @app.command()
-def run() -> None:
-    """Run an agent with step-by-step tracing (M5)."""
-    _not_implemented("run")
+def run(
+    agent_file: Annotated[Path, typer.Argument(help="Path to the agent file.")],
+    task: Annotated[str, typer.Argument(help="The task for the agent.")],
+    fake: Annotated[
+        Path | None,
+        typer.Option("--fake", help="Run with the fake provider using this script."),
+    ] = None,
+    world: Annotated[
+        Path | None,
+        typer.Option("--world", help="Seed the mock world from this YAML file."),
+    ] = None,
+    trace: Annotated[
+        bool, typer.Option("--trace", help="Stream each trace event live.")
+    ] = False,
+    runs_dir: Annotated[
+        Path, typer.Option("--runs-dir", help="Directory for trace files.")
+    ] = Path("runs"),
+) -> None:
+    """Run an agent from the command line."""
+    console = Console()
+    try:
+        agent = Agent.load(agent_file)
+    except AgentFileValidationError as exc:
+        for issue in exc.issues:
+            typer.echo(issue.message, err=True)
+        raise typer.Exit(code=1) from exc
+    except OSError as exc:
+        typer.echo(f"{agent_file}: {exc.strerror or exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    provider = FakeProvider(FakeScript.from_path(fake)) if fake is not None else None
+    world_state = (
+        MockWorld.from_yaml(world.read_text(encoding="utf-8"))
+        if world is not None
+        else None
+    )
+    on_event = StepPrinter(console) if trace else None
+
+    try:
+        result = agent.run(
+            task,
+            provider=provider,
+            world=world_state,
+            runs_dir=runs_dir,
+            on_event=on_event,
+        )
+    except ProviderError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if not trace:
+        console.print(result.output or "(no output)")
+    console.print(
+        f"\n[dim]run {result.run_id}: {result.status.value} in "
+        f"{result.steps} steps · trace: {result.trace_path}[/]"
+    )
+    if not result.completed:
+        raise typer.Exit(code=1)
 
 
 trace_app = typer.Typer(name="trace", help="Inspect a run trace.", no_args_is_help=True)

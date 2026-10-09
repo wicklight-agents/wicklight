@@ -1,0 +1,14 @@
+# A seeded MockWorld for the inbox-summarizer demo.
+# Run it with:
+#   uv run wicklight run examples/inbox.md "summarize my inbox" \
+#     --fake examples/scripts/summarize.yaml --world examples/worlds/inbox.yaml --trace
+inbox:
+  - sender: amy@mycompany.com
+    subject: "Lunch Friday?"
+    body: "Are you free for lunch on Friday?"
+  - sender: sam@mycompany.com
+    subject: "Q3 report"
+    body: "Can you review the draft before Thursday?"
+  - sender: newsletter@news.example
+    subject: "This week in tech"
+    body: "Top stories you may have missed."

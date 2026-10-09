@@ -14,6 +14,7 @@ with an ``error`` event.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -95,9 +96,15 @@ class TraceLog:
     loop and its checks record events, nothing writes the file directly.
     """
 
-    def __init__(self, writer: TraceWriter, run_id: str) -> None:
+    def __init__(
+        self,
+        writer: TraceWriter,
+        run_id: str,
+        on_event: Callable[[TraceEvent], None] | None = None,
+    ) -> None:
         self._writer = writer
         self.run_id = run_id
+        self._on_event = on_event
 
     def emit(
         self,
@@ -114,6 +121,8 @@ class TraceLog:
             payload=payload,
         )
         self._writer.write_event(event)
+        if self._on_event is not None:
+            self._on_event(event)
 
 
 @dataclass(frozen=True)
@@ -175,9 +184,10 @@ async def run_agent(
     checks: Sequence[ToolCheck] = (),
     ctx: ToolContext | None = None,
     agent_file: AgentFile | None = None,
+    on_event: Callable[[TraceEvent], None] | None = None,
 ) -> RunResult:
     """Run an agent to completion, recording every step to the trace."""
-    log = TraceLog(writer, run_id)
+    log = TraceLog(writer, run_id, on_event)
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
     model_id = config.models.default.value
     max_steps = config.limits.max_steps.value
@@ -199,126 +209,139 @@ async def run_agent(
     status = RunStatus.COMPLETED
     step = 0
 
-    while True:
-        step += 1
-        # Limits are fixed in the core and checked every step. Any one stops the
-        # run cleanly with a limit_hit event.
-        elapsed = time.perf_counter() - started
-        if elapsed > timeout:
-            log.emit(
-                LimitHit,
-                step,
-                f"hit limit timeout ({timeout:g}s)",
-                LimitHitPayload(limit="timeout", limit_value=timeout, observed=elapsed),
-            )
-            status = RunStatus.LIMIT
-            break
-        if step > max_steps:
-            log.emit(
-                LimitHit,
-                step,
-                f"hit limit max_steps ({max_steps})",
-                LimitHitPayload(
-                    limit="max_steps", limit_value=max_steps, observed=step
-                ),
-            )
-            status = RunStatus.LIMIT
-            break
-
-        # 1. Build context: instructions, the task, then the conversation so far.
-        messages = [
-            Message(role=Role.SYSTEM, content=instructions),
-            Message(role=Role.USER, content=task),
-            *history,
-        ]
-        log.emit(
-            ContextBuilt,
-            step,
-            f"built context with {len(messages)} messages",
-            ContextBuiltPayload(message_count=len(messages)),
-        )
-
-        # 2. Route to a model and call it through the provider.
-        log.emit(
-            ModelRouted,
-            step,
-            f"routed to {model_id}",
-            ModelRoutedPayload(model=model_id),
-        )
-        log.emit(
-            ModelCalled, step, f"called {model_id}", ModelCalledPayload(model=model_id)
-        )
-        try:
-            response = await provider.complete(
-                ModelRequest(model=model_id, messages=messages, tools=tool_defs)
-            )
-        except ProviderError as exc:
-            # A harness error stops the run.
-            log.emit(
-                ErrorEvent,
-                step,
-                f"error: {exc}",
-                ErrorPayload(message=str(exc), where="model_called"),
-            )
-            status = RunStatus.ERROR
-            break
-
-        usage = _add_usage(usage, response.usage)
-        log.emit(
-            ModelResponded,
-            step,
-            _responded_explain(response),
-            _responded_payload(model_id, response),
-        )
-
-        if usage.cost_usd is not None and usage.cost_usd > max_cost:
-            log.emit(
-                LimitHit,
-                step,
-                f"hit limit max_cost (${max_cost:.2f})",
-                LimitHitPayload(
-                    limit="max_cost", limit_value=max_cost, observed=usage.cost_usd
-                ),
-            )
-            status = RunStatus.LIMIT
-            break
-
-        # The model's turn is part of the history either way.
-        history.append(Message(role=Role.ASSISTANT, content=response.content))
-
-        # 4. If the model asked for no tools, it has finished.
-        if not response.tool_calls:
-            output = response.content
-            status = RunStatus.COMPLETED
-            break
-
-        # 3. For each proposed tool call: check, then execute, then record.
-        for call in response.tool_calls:
-            log.emit(
-                ToolProposed,
-                step,
-                f"model proposed {call.name}",
-                ToolProposedPayload(
-                    tool=call.name, call_id=call.id, arguments=call.arguments
-                ),
-            )
-            result = await _handle_call(
-                call, tools, checks, config, ctx, log, step, agent_file
-            )
-            history.append(
-                Message(
-                    role=Role.TOOL,
-                    content=result.output if result.ok else (result.error or ""),
-                    tool_call_id=call.id,
-                    name=call.name,
-                    trusted=False,
+    interrupted = False
+    try:
+        while True:
+            step += 1
+            # Limits are fixed in the core and checked every step. Any one stops
+            # the run cleanly with a limit_hit event.
+            elapsed = time.perf_counter() - started
+            if elapsed > timeout:
+                log.emit(
+                    LimitHit,
+                    step,
+                    f"hit limit timeout ({timeout:g}s)",
+                    LimitHitPayload(
+                        limit="timeout", limit_value=timeout, observed=elapsed
+                    ),
                 )
+                status = RunStatus.LIMIT
+                break
+            if step > max_steps:
+                log.emit(
+                    LimitHit,
+                    step,
+                    f"hit limit max_steps ({max_steps})",
+                    LimitHitPayload(
+                        limit="max_steps", limit_value=max_steps, observed=step
+                    ),
+                )
+                status = RunStatus.LIMIT
+                break
+
+            # 1. Build context: instructions, the task, then the history so far.
+            messages = [
+                Message(role=Role.SYSTEM, content=instructions),
+                Message(role=Role.USER, content=task),
+                *history,
+            ]
+            log.emit(
+                ContextBuilt,
+                step,
+                f"built context with {len(messages)} messages",
+                ContextBuiltPayload(message_count=len(messages)),
             )
 
+            # 2. Route to a model and call it through the provider.
+            log.emit(
+                ModelRouted,
+                step,
+                f"routed to {model_id}",
+                ModelRoutedPayload(model=model_id),
+            )
+            log.emit(
+                ModelCalled,
+                step,
+                f"called {model_id}",
+                ModelCalledPayload(model=model_id),
+            )
+            try:
+                response = await provider.complete(
+                    ModelRequest(model=model_id, messages=messages, tools=tool_defs)
+                )
+            except ProviderError as exc:
+                # A harness error stops the run.
+                log.emit(
+                    ErrorEvent,
+                    step,
+                    f"error: {exc}",
+                    ErrorPayload(message=str(exc), where="model_called"),
+                )
+                status = RunStatus.ERROR
+                break
+
+            usage = _add_usage(usage, response.usage)
+            log.emit(
+                ModelResponded,
+                step,
+                _responded_explain(response),
+                _responded_payload(model_id, response),
+            )
+
+            if usage.cost_usd is not None and usage.cost_usd > max_cost:
+                log.emit(
+                    LimitHit,
+                    step,
+                    f"hit limit max_cost (${max_cost:.2f})",
+                    LimitHitPayload(
+                        limit="max_cost", limit_value=max_cost, observed=usage.cost_usd
+                    ),
+                )
+                status = RunStatus.LIMIT
+                break
+
+            # The model's turn is part of the history either way.
+            history.append(Message(role=Role.ASSISTANT, content=response.content))
+
+            # 4. If the model asked for no tools, it has finished.
+            if not response.tool_calls:
+                output = response.content
+                status = RunStatus.COMPLETED
+                break
+
+            # 3. For each proposed tool call: check, then execute, then record.
+            for call in response.tool_calls:
+                log.emit(
+                    ToolProposed,
+                    step,
+                    f"model proposed {call.name}",
+                    ToolProposedPayload(
+                        tool=call.name, call_id=call.id, arguments=call.arguments
+                    ),
+                )
+                result = await _handle_call(
+                    call, tools, checks, config, ctx, log, step, agent_file
+                )
+                history.append(
+                    Message(
+                        role=Role.TOOL,
+                        content=result.output if result.ok else (result.error or ""),
+                        tool_call_id=call.id,
+                        name=call.name,
+                        trusted=False,
+                    )
+                )
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # A human stopped the run. Record it and exit cleanly so the trace still
+        # ends with a run_finished event.
+        interrupted = True
+        status = RunStatus.STOPPED
+
+    reason = "interrupted" if interrupted else status.value
     log.emit(
         RunFinished,
         step,
-        f"run finished: {status.value} in {step} steps",
+        f"run finished: {reason} in {step} steps",
         RunFinishedPayload(status=status, steps=step, cost_usd=usage.cost_usd),
     )
     return RunResult(
