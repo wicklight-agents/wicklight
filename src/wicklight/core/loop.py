@@ -18,6 +18,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
@@ -149,6 +150,17 @@ class RunResult:
     steps: int
     output: str
     usage: Usage
+    trace_path: Path | None = None
+
+    @property
+    def completed(self) -> bool:
+        """True if the run finished normally (not stopped by a limit or error)."""
+        return self.status is RunStatus.COMPLETED
+
+    @property
+    def stopped(self) -> bool:
+        """True if the run was stopped early — by a limit, an error, or a halt."""
+        return self.status is not RunStatus.COMPLETED
 
 
 async def run_agent(
@@ -310,7 +322,12 @@ async def run_agent(
         RunFinishedPayload(status=status, steps=step, cost_usd=usage.cost_usd),
     )
     return RunResult(
-        run_id=run_id, status=status, steps=step, output=output, usage=usage
+        run_id=run_id,
+        status=status,
+        steps=step,
+        output=output,
+        usage=usage,
+        trace_path=writer.path,
     )
 
 
