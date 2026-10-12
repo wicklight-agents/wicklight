@@ -4,3 +4,9 @@ A policy inspects a proposed tool call and returns allow or deny with a
 reason. Every policy runs before every call; denials are logged with the rule
 and its source line (e.g. recipient allowlists, spend limits).
 """
+
+from __future__ import annotations
+
+from wicklight.policies.block_tools import BlockTools, BlockToolsConfig
+
+__all__ = ["BlockTools", "BlockToolsConfig"]
