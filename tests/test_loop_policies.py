@@ -15,7 +15,7 @@ from wicklight.contracts import (
     PolicyDecision,
     deny,
 )
-from wicklight.core import ConfiguredPolicy, RunResult
+from wicklight.core import AutoApprove, ConfiguredPolicy, RunResult
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.tools import MockWorld
 from wicklight.trace import Decision, TraceEvent, read_trace
@@ -44,6 +44,7 @@ def _run(
         provider=provider,
         world=world,
         policies=policies,
+        approver=AutoApprove(),  # focus these tests on policy behavior, not approval
         run_id="t",
         runs_dir=run_dir,
     )

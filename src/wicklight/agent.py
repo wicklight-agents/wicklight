@@ -29,7 +29,13 @@ from wicklight.contracts import (
     Tool,
     ToolRegistry,
 )
-from wicklight.core import ConfiguredPolicy, RunResult, ToolCheck, run_agent
+from wicklight.core import (
+    Approver,
+    ConfiguredPolicy,
+    RunResult,
+    ToolCheck,
+    run_agent,
+)
 from wicklight.tools import MockWorld, mock_tools
 from wicklight.trace import TraceEvent, TraceWriter
 
@@ -64,7 +70,7 @@ class Agent:
         provider: Provider | None = None,
         tools: Mapping[str, Tool] | None = None,
         world: MockWorld | None = None,
-        approver: object | None = None,
+        approver: Approver | None = None,
         checks: Sequence[ToolCheck] = (),
         policies: Sequence[ConfiguredPolicy] | None = None,
         on_event: Callable[[TraceEvent], None] | None = None,
@@ -76,8 +82,6 @@ class Agent:
         model_provider = self._resolve_provider(provider)
         tool_map = self._resolve_tools(tools, world)
         configured_policies = self._resolve_policies(policies)
-        # `approver` is accepted now for API stability; the approval gate that
-        # uses it lands in M7.
         with TraceWriter(run_id, root=runs_dir) as writer:
             return await run_agent(
                 run_id=run_id,
@@ -89,6 +93,7 @@ class Agent:
                 writer=writer,
                 checks=checks,
                 policies=configured_policies,
+                approver=approver,
                 agent_file=self._agent_file,
                 on_event=on_event,
             )
@@ -100,7 +105,7 @@ class Agent:
         provider: Provider | None = None,
         tools: Mapping[str, Tool] | None = None,
         world: MockWorld | None = None,
-        approver: object | None = None,
+        approver: Approver | None = None,
         checks: Sequence[ToolCheck] = (),
         policies: Sequence[ConfiguredPolicy] | None = None,
         on_event: Callable[[TraceEvent], None] | None = None,

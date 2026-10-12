@@ -109,6 +109,8 @@ class ApprovalResolvedPayload(_Payload):
     call_id: str | None = None
     approved: bool
     by: str | None = None
+    note: str | None = None
+    duration_ms: float | None = None
 
 
 class ToolExecutedPayload(_Payload):

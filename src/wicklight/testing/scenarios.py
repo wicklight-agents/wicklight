@@ -17,10 +17,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from wicklight.agent import Agent
-from wicklight.core import RunResult, ToolCheck
+from wicklight.core import Approver, RunResult, ToolCheck
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.tools import MockWorld
 from wicklight.trace import (
+    ApprovalResolved,
     Decision,
     LimitHit,
     PolicyChecked,
@@ -66,6 +67,28 @@ class ScenarioResult:
             raise AssertionError(f"expected tool {tool!r} not to run, but it did")
         return self
 
+    def assert_approved(self, tool: str) -> ScenarioResult:
+        if not any(
+            isinstance(e, ApprovalResolved)
+            and e.payload.tool == tool
+            and e.payload.approved
+            for e in self.events
+        ):
+            raise AssertionError(f"expected {tool!r} to be approved, but it was not")
+        return self
+
+    def assert_approval_denied(self, tool: str) -> ScenarioResult:
+        if not any(
+            isinstance(e, ApprovalResolved)
+            and e.payload.tool == tool
+            and not e.payload.approved
+            for e in self.events
+        ):
+            raise AssertionError(
+                f"expected {tool!r} approval to be denied, but it was not"
+            )
+        return self
+
     def assert_blocked(
         self, *, tool: str, by: str | None = None, reason: str | None = None
     ) -> ScenarioResult:
@@ -106,6 +129,7 @@ class Scenario:
     world: str = ""
     task: str = "run the task"
     checks: Sequence[ToolCheck] = ()
+    approver: Approver | None = None
 
     def run(self, *, runs_dir: str | Path | None = None) -> ScenarioResult:
         """Run the scenario and return its result (synchronously)."""
@@ -125,6 +149,7 @@ class Scenario:
             provider=provider,
             world=world,
             checks=self.checks,
+            approver=self.approver,
             run_id="scenario",
             runs_dir=run_dir,
         )

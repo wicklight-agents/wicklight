@@ -7,6 +7,7 @@ implement.
 
 from __future__ import annotations
 
+from wicklight.core import AutoApprove, AutoDeny, ScriptedApprover
 from wicklight.testing.conformance import (
     CheckResult,
     ConformanceCase,
@@ -20,6 +21,8 @@ from wicklight.testing.scenarios import Scenario, ScenarioResult
 from wicklight.testing.tool_conformance import run_tool_conformance
 
 __all__ = [
+    "AutoApprove",
+    "AutoDeny",
     "CheckResult",
     "ConformanceCase",
     "ConformanceFactory",
@@ -27,6 +30,7 @@ __all__ = [
     "ProviderScenario",
     "Scenario",
     "ScenarioResult",
+    "ScriptedApprover",
     "run_policy_conformance",
     "run_provider_conformance",
     "run_tool_conformance",

@@ -46,7 +46,17 @@ from wicklight.contracts import (
     ToolRisk,
     Usage,
 )
+from wicklight.core.approval import (
+    REQUIRE_APPROVER,
+    ApprovalRequest,
+    Approved,
+    Approver,
+)
 from wicklight.trace import (
+    ApprovalRequested,
+    ApprovalRequestedPayload,
+    ApprovalResolved,
+    ApprovalResolvedPayload,
     ContextBuilt,
     ContextBuiltPayload,
     Decision,
@@ -203,6 +213,7 @@ async def run_agent(
     writer: TraceWriter,
     checks: Sequence[ToolCheck] = (),
     policies: Sequence[ConfiguredPolicy] = (),
+    approver: Approver | None = None,
     ctx: ToolContext | None = None,
     agent_file: AgentFile | None = None,
     on_event: Callable[[TraceEvent], None] | None = None,
@@ -210,6 +221,8 @@ async def run_agent(
     """Run an agent to completion, recording every step to the trace."""
     log = TraceLog(writer, run_id, on_event)
     agent_dir = _agent_dir(agent_file)
+    # With no approver, the gate fails closed: approval-required calls are denied.
+    approver = approver if approver is not None else REQUIRE_APPROVER
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
     model_id = config.models.default.value
     max_steps = config.limits.max_steps.value
@@ -362,6 +375,7 @@ async def run_agent(
                     checks,
                     policies,
                     pctx,
+                    approver,
                     config,
                     ctx,
                     log,
@@ -400,6 +414,7 @@ async def _handle_call(
     checks: Sequence[ToolCheck],
     policies: Sequence[ConfiguredPolicy],
     pctx: PolicyContext,
+    approver: Approver,
     config: EffectiveConfig,
     ctx: ToolContext,
     log: TraceLog,
@@ -425,13 +440,19 @@ async def _handle_call(
     if not policy_outcome.allowed:
         return ToolResult.failure(f"blocked: {policy_outcome.reason}")
 
-    # Then any plugin checks (approvals in M7). A denied call is never executed;
-    # the check records why in the trace.
+    # Then any plugin checks. A denied call is never executed; the check records
+    # why in the trace.
     proposed = ProposedCall(call, tool, tool_input, step, config, log)
     for check in checks:
         outcome = await check(proposed)
         if not outcome.allowed:
             return ToolResult.failure(f"blocked: {outcome.reason}")
+
+    # Final stage: if the tool needs approval, pause for the approver. A denial
+    # (or no approver) blocks the call and is explained to the model.
+    approval = await _check_approval(call, config, approver, log, step)
+    if not approval.allowed:
+        return ToolResult.failure(f"blocked: {approval.reason}")
 
     # Execute the tool and record the result.
     start = time.perf_counter()
@@ -601,6 +622,70 @@ def _check_policies(
             ),
         )
     return CheckOutcome(allowed=True)
+
+
+async def _check_approval(
+    call: ToolCall,
+    config: EffectiveConfig,
+    approver: Approver,
+    log: TraceLog,
+    step: int,
+) -> CheckOutcome:
+    """If the tool needs approval, request it and record the outcome."""
+    if not config.requires_approval(call.name):
+        return CheckOutcome(allowed=True)
+
+    reason = _approval_reason(call.name, config)
+    log.emit(
+        ApprovalRequested,
+        step,
+        f"approval requested for {call.name}: {reason}",
+        ApprovalRequestedPayload(tool=call.name, call_id=call.id, reason=reason),
+    )
+
+    started = time.perf_counter()
+    decision = await approver.request(
+        ApprovalRequest(
+            tool=call.name,
+            reason=reason,
+            arguments=dict(call.arguments),
+            call_id=call.id,
+        )
+    )
+    duration_ms = (time.perf_counter() - started) * 1000
+    approved = isinstance(decision, Approved)
+    note = None if approved else decision.note or None
+
+    verb = "approved" if approved else "denied"
+    explain = f"{call.name} {verb} by {approver.name}"
+    if note:
+        explain += f": {note}"
+    log.emit(
+        ApprovalResolved,
+        step,
+        explain,
+        ApprovalResolvedPayload(
+            tool=call.name,
+            call_id=call.id,
+            approved=approved,
+            by=approver.name,
+            note=note,
+            duration_ms=duration_ms,
+        ),
+    )
+
+    if approved:
+        return CheckOutcome(allowed=True)
+    detail = f": {note}" if note else ""
+    return CheckOutcome(allowed=False, reason=f"{call.name} was not approved{detail}")
+
+
+def _approval_reason(tool_name: str, config: EffectiveConfig) -> str:
+    """Why this tool needs approval, for the request event and the approver."""
+    tool = config.tools.get(tool_name)
+    if tool is not None and tool.level.value is PermissionLevel.IRREVERSIBLE:
+        return f"tool '{tool_name}' is irreversible"
+    return f"tool '{tool_name}' requires approval"
 
 
 def _emit_policy(

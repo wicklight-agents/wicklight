@@ -75,9 +75,10 @@ A tool call paused for human approval. **Payload:** `tool`, `call_id`
 (optional), `reason` (optional). *explain:* `approval requested for send_email`
 
 ### `approval_resolved`
-A human approved or rejected a pending call. **Payload:** `tool`, `call_id`
-(optional), `approved` (bool), `by` (optional). *explain:* `approval granted for
-send_email by user`
+An approver approved or rejected a pending call. **Payload:** `tool`, `call_id`
+(optional), `approved` (bool), `by` (who/what decided, optional), `note` (the
+denial reason, optional), `duration_ms` (how long it took, optional).
+*explain:* `make_payment approved by auto-approve`
 
 ### `tool_executed`
 A tool ran and its result was recorded. **Payload:** `tool`, `call_id`
