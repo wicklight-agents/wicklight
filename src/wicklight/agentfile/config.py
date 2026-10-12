@@ -63,6 +63,7 @@ class EffectiveTool:
     level: Sourced[PermissionLevel]
     approval_required: Sourced[bool]
     waiver: Sourced[bool]
+    waiver_reason: Sourced[str | None]
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,16 @@ class EffectiveConfig:
         tool = self.tools.get(name)
         return tool.approval_required.value if tool is not None else False
 
+    def is_waived(self, name: str) -> bool:
+        """Whether a tool's would-be approval has been explicitly waived."""
+        tool = self.tools.get(name)
+        return tool.waiver.value if tool is not None else False
+
+    def waiver_reason(self, name: str) -> str | None:
+        """The written reason for a tool's waiver, if it has one."""
+        tool = self.tools.get(name)
+        return tool.waiver_reason.value if tool is not None else None
+
 
 def build_effective_config(
     config: AgentConfig, *, provided: Mapping[str, Any]
@@ -132,20 +143,34 @@ def build_effective_config(
 def _effective_tool(spec: ToolSpec, raw: Mapping[str, Any]) -> EffectiveTool:
     # A listed tool's level always comes from the file.
     level = Sourced(spec.level, Source.FILE)
-    waiver = Sourced(spec.waiver, Source.FILE if "waiver" in raw else Source.DEFAULT)
+    explicit_required = spec.approval is Approval.REQUIRED
+    is_irreversible = spec.level is PermissionLevel.IRREVERSIBLE
+    # A waiver only applies to the approval an irreversible tool would require by
+    # default; an explicit `approval: required` is gated regardless and wins.
+    waived = spec.waive_approval and is_irreversible and not explicit_required
 
-    if spec.approval is Approval.REQUIRED:
+    if explicit_required:
         approval = Sourced(True, Source.FILE)
-    elif spec.level is PermissionLevel.IRREVERSIBLE and not spec.waiver:
+    elif is_irreversible and not waived:
         # Safe default: irreversible tools require approval unless waived.
         approval = Sourced(True, Source.DEFAULT)
-    elif spec.level is PermissionLevel.IRREVERSIBLE:
+    elif is_irreversible:
         # Approval dropped because the file explicitly waived it.
         approval = Sourced(False, Source.FILE)
     else:
         approval = Sourced(False, Source.DEFAULT)
 
-    return EffectiveTool(level=level, approval_required=approval, waiver=waiver)
+    waiver = Sourced(waived, Source.FILE if spec.waive_approval else Source.DEFAULT)
+    waiver_reason = Sourced(
+        spec.reason if waived else None,
+        Source.FILE if waived else Source.DEFAULT,
+    )
+    return EffectiveTool(
+        level=level,
+        approval_required=approval,
+        waiver=waiver,
+        waiver_reason=waiver_reason,
+    )
 
 
 def _effective_limits(config: AgentConfig) -> EffectiveLimits:

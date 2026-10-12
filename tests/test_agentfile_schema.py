@@ -53,7 +53,7 @@ def test_tool_shorthand_and_full_form() -> None:
     # Bare string shorthand expands to a ToolSpec.
     assert config.tools["read_inbox"].level is PermissionLevel.READ
     assert config.tools["read_inbox"].approval is None
-    assert config.tools["read_inbox"].waiver is False
+    assert config.tools["read_inbox"].waive_approval is False
     # Full mapping form.
     send = config.tools["send_email"]
     assert send.level is PermissionLevel.WRITE

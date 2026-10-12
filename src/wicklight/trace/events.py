@@ -111,6 +111,9 @@ class ApprovalResolvedPayload(_Payload):
     by: str | None = None
     note: str | None = None
     duration_ms: float | None = None
+    # True when approval was waived by the agent file rather than granted by an
+    # approver. The note carries the written waiver reason.
+    waived: bool = False
 
 
 class ToolExecutedPayload(_Payload):

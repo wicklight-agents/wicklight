@@ -10,7 +10,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, cast
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 # Forbid unknown keys everywhere: an unrecognized field is a mistake, and the
 # harness would rather fail loudly than silently drop a rule the author meant.
@@ -40,8 +40,18 @@ class ToolSpec(BaseModel):
     level: PermissionLevel
     approval: Approval | None = None
     # Explicit per-tool waiver of the approval an irreversible tool would
-    # otherwise require. `check` flags every waiver; the trace records it.
-    waiver: bool = False
+    # otherwise require. A waiver must carry a written reason; `check` flags
+    # every waiver and the trace records it.
+    waive_approval: bool = False
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _waiver_needs_reason(self) -> ToolSpec:
+        if self.waive_approval and not (self.reason and self.reason.strip()):
+            raise ValueError(
+                "a waiver (waive_approval: true) requires a written reason"
+            )
+        return self
 
 
 class Route(BaseModel):

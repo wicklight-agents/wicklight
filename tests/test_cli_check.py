@@ -64,15 +64,15 @@ def test_render_lists_irreversible_tools_and_waivers() -> None:
         "  default: m\n"
         "tools:\n"
         "  delete_all: { level: irreversible }\n"
-        "  purge: { level: irreversible, waiver: true }\n"
+        '  purge: { level: irreversible, waive_approval: true, reason: "nightly gc" }\n'
         "---\n"
         "Body.\n"
     )
     output = _render(text)
     assert "  delete_all: irreversible, approval required (from file)" in output
-    assert "  purge: irreversible, waiver (from file)" in output
+    assert "  purge: irreversible, approval waived (from file)" in output
     assert "irreversible tools:\n  - delete_all\n  - purge" in output
-    assert "approval waivers:\n  - purge" in output
+    assert "approval waivers:\n  - purge: nightly gc" in output
 
 
 def test_render_lists_configured_policies() -> None:

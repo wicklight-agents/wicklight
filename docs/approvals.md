@@ -44,6 +44,25 @@ attached to a TTY** (piped output, CI), it denies immediately and says why
 rather than blocking on a prompt that can't appear. The library `agent.run()`
 default stays fail-closed (below); pass `TerminalApprover()` explicitly to opt in.
 
+## Waivers
+
+An irreversible tool requires approval by default. The agent file can waive that
+default for a specific tool — but only with a **written reason** (DTN-223):
+
+```yaml
+tools:
+  purge: { level: irreversible, waive_approval: true, reason: "nightly scratch cleanup" }
+```
+
+`wicklight check` rejects a waiver with no reason and lists every waiver (with
+its reason) prominently. A waived call is **not** sent to an approver, but it is
+still recorded: the trace gets an `approval_resolved` event with `waived: true`,
+`by: "waiver"`, and the reason as its note — so a waiver is always auditable.
+
+A waiver only lifts the irreversible **default**. A tool marked
+`approval: required` is gated regardless, and an explicit requirement wins over a
+waiver on the same tool.
+
 ## Fail closed
 
 If a call needs approval and **no approver is configured**, the gate denies it

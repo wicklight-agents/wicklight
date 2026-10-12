@@ -52,11 +52,10 @@ def render_effective_config(config: EffectiveConfig) -> str:
         for name, tool in config.tools.items()
         if tool.level.value is PermissionLevel.IRREVERSIBLE
     ]
-    waivers = [name for name, tool in config.tools.items() if tool.waiver.value]
 
     lines += _tool_list("irreversible tools", irreversible)
     lines.append("")
-    lines += _tool_list("approval waivers", waivers)
+    lines += _render_waivers(config)
 
     return "\n".join(lines)
 
@@ -66,8 +65,23 @@ def _tool_summary(tool: EffectiveTool) -> list[str]:
     if tool.approval_required.value:
         parts.append("approval required")
     if tool.waiver.value:
-        parts.append("waiver")
+        parts.append("approval waived")
     return parts
+
+
+def _render_waivers(config: EffectiveConfig) -> list[str]:
+    # Waivers drop a safety default, so `check` calls them out with their reason.
+    waived = [
+        (name, tool.waiver_reason.value or "(no reason given)")
+        for name, tool in config.tools.items()
+        if tool.waiver.value
+    ]
+    lines = ["approval waivers:"]
+    if waived:
+        lines += [f"  - {name}: {reason}" for name, reason in waived]
+    else:
+        lines.append("  none")
+    return lines
 
 
 def _render_policies(policies: Sourced[list[dict[str, Any]]]) -> list[str]:
