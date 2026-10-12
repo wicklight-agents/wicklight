@@ -20,7 +20,6 @@ committed cassette.
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import AsyncGenerator, Iterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -28,6 +27,17 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
+
+from wicklight.redaction import scan_for_secrets, scrub_text
+
+__all__ = [
+    "Cassette",
+    "CassetteError",
+    "cassette_client",
+    "iter_cassettes",
+    "scan_for_secrets",
+    "scrub_text",
+]
 
 CASSETTE_FORMAT_VERSION = 1
 
@@ -44,16 +54,6 @@ _SENSITIVE_HEADERS = frozenset(
         "cookie",
     }
 )
-
-# Key-shaped strings the scrubber redacts and the CI scan flags. Deliberately
-# broad: a committed cassette should never contain anything matching these.
-_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"sk-ant-[A-Za-z0-9_-]{8,}"),
-    re.compile(r"sk-[A-Za-z0-9]{16,}"),
-    re.compile(r"Bearer\s+[A-Za-z0-9._-]{16,}"),
-    re.compile(r"AKIA[0-9A-Z]{16}"),
-)
-_REDACTED = "REDACTED"
 
 
 class CassetteError(Exception):
@@ -147,21 +147,6 @@ def scrub_headers(headers: Mapping[str, str]) -> dict[str, str]:
         for key, value in headers.items()
         if key.lower() not in _SENSITIVE_HEADERS
     }
-
-
-def scrub_text(text: str) -> str:
-    """Replace any key-shaped substrings with a redaction marker."""
-    for pattern in _SECRET_PATTERNS:
-        text = pattern.sub(_REDACTED, text)
-    return text
-
-
-def scan_for_secrets(text: str) -> list[str]:
-    """Return every secret-shaped substring found (empty when clean)."""
-    found: list[str] = []
-    for pattern in _SECRET_PATTERNS:
-        found.extend(match.group(0) for match in pattern.finditer(text))
-    return found
 
 
 class _ReplayTransport(httpx.MockTransport):

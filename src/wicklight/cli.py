@@ -24,9 +24,11 @@ from wicklight.agentfile import (
     parse_and_validate,
     render_effective_config,
 )
+from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import Capabilities, ProviderError, describe_providers
 from wicklight.core import TerminalApprover
 from wicklight.providers import FakeProvider, FakeScript
+from wicklight.providers.credentials import required_keys
 from wicklight.tools import MockWorld
 from wicklight.trace import TraceReadError, dump_trace_event, read_trace
 from wicklight.trace.console import StepPrinter, filter_events, print_trace
@@ -87,6 +89,31 @@ def check(
 
     effective = build_effective_config(config, provided=agent.frontmatter)
     typer.echo(render_effective_config(effective))
+    typer.echo("")
+    typer.echo(_render_api_keys(effective))
+
+
+def _render_api_keys(config: EffectiveConfig) -> str:
+    """Report which API keys the config's models need, and whether they are set.
+
+    Keys are read from the environment, never the agent file, and their values
+    are never printed — only the variable name and whether it is present.
+    """
+    models = config.models
+    model_ids = [
+        models.default.value,
+        *(route.use for route in models.routes.value),
+        *models.fallback.value,
+    ]
+    requirements = required_keys(model_ids)
+    lines = ["api keys:"]
+    if not requirements:
+        lines.append("  none required")
+        return "\n".join(lines)
+    for req in requirements:
+        state = "set" if req.is_set else "MISSING"
+        lines.append(f"  {req.env_var}: {state} (for {req.provider})")
+    return "\n".join(lines)
 
 
 @app.command()

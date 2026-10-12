@@ -36,6 +36,7 @@ from wicklight.core import (
     ToolCheck,
     run_agent,
 )
+from wicklight.providers.credentials import trace_redactor
 from wicklight.tools import MockWorld, mock_tools
 from wicklight.trace import TraceEvent, TraceWriter
 
@@ -82,7 +83,7 @@ class Agent:
         model_provider = self._resolve_provider(provider)
         tool_map = self._resolve_tools(tools, world)
         configured_policies = self._resolve_policies(policies)
-        with TraceWriter(run_id, root=runs_dir) as writer:
+        with TraceWriter(run_id, root=runs_dir, redactor=trace_redactor()) as writer:
             return await run_agent(
                 run_id=run_id,
                 instructions=self._agent_file.body,

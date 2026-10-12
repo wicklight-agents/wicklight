@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from wicklight.agentfile import (
@@ -108,10 +109,37 @@ def test_render_shows_none_when_no_policies() -> None:
     assert "policies:\n  none (default)" in _render(text)
 
 
-def test_check_valid_file_exits_zero_and_prints_config() -> None:
+def test_check_valid_file_exits_zero_and_prints_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     result = runner.invoke(app, ["check", str(INBOX)])
     assert result.exit_code == 0
-    assert result.output.rstrip("\n") == INBOX_SNAPSHOT
+    # The effective config is printed, followed by the api-keys report.
+    assert INBOX_SNAPSHOT in result.output
+    assert "api keys:\n  ANTHROPIC_API_KEY: MISSING (for anthropic)" in result.output
+
+
+def test_check_reports_a_set_key_without_printing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-super-secret-value-123456")
+    result = runner.invoke(app, ["check", str(INBOX)])
+    assert result.exit_code == 0
+    assert "ANTHROPIC_API_KEY: set (for anthropic)" in result.output
+    assert "sk-ant-super-secret-value-123456" not in result.output  # never printed
+
+
+def test_check_reports_no_keys_for_a_keyless_provider(tmp_path: Path) -> None:
+    agent = tmp_path / "fake.md"
+    agent.write_text(
+        "---\nname: t\nmodels: { default: fake/x }\ntools: { read_inbox: read }\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["check", str(agent)])
+    assert result.exit_code == 0
+    assert "api keys:\n  none required" in result.output
 
 
 def test_check_invalid_file_exits_nonzero() -> None:
