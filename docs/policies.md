@@ -69,3 +69,19 @@ policies:
 See `examples/inbox.md`, `examples/files.md`, and `examples/payments.md` for
 complete agent files. A minimal reference policy, `block_tools`, lives in
 `src/wicklight/policies/block_tools.py`.
+
+## The prompt-injection demo
+
+The headline safety demo (DTN-220) puts policies and untrusted tagging together.
+A poisoned inbox email tries to make the agent forward data to an outside
+address; the scripted model falls for it and calls `send_email` to the attacker;
+`email_only_to` blocks the send and the trace explains why.
+
+```bash
+uv run wicklight run examples/inbox.md "handle my inbox" \
+  --fake examples/scripts/injection.yaml \
+  --world examples/worlds/injection.yaml --trace
+```
+
+Expect a `policy_checked` deny for `send_email` to `attacker@evil.com`, citing
+`email_only_to` and its agent-file line — and no mail is ever sent.
