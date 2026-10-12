@@ -68,9 +68,15 @@ Each iteration is one step:
    that raises counts as a deny (fail closed) and is also logged as an `error`.
    Every result is recorded as a `policy_checked` event, with denials citing the
    policy and its agent-file line. See `docs/policies.md`.
-4. **Plugin checks.** Any additional checks run in order (approvals in M7); the
-   first denial blocks the call the same way. By default there are none.
-5. **Execute** the tool and record `tool_executed` with its result and duration.
+4. **Plugin checks.** Any additional checks run in order; the first denial
+   blocks the call the same way. By default there are none.
+5. **Approval gate (fixed, last).** If the tool needs approval — it's listed
+   `approval: required`, or it's irreversible and not waived — the loop pauses
+   and asks the `Approver` (DTN-221). It emits `approval_requested`, then
+   `approval_resolved` recording who decided and how long it took. A denial (or
+   no approver configured — the gate **fails closed**) blocks the call with a
+   clear message. See `docs/approvals.md`.
+6. **Execute** the tool and record `tool_executed` with its result and duration.
    If a tool misbehaves and raises, that is surfaced to the model as a failure
    rather than taking down the run.
 
