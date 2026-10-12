@@ -36,6 +36,9 @@ tools:
   read_inbox: read (from file)
   send_email: write, approval required (from file)
 
+policies:
+  email_only_to: @mycompany.com (from file)
+
 irreversible tools:
   none
 
@@ -70,6 +73,39 @@ def test_render_lists_irreversible_tools_and_waivers() -> None:
     assert "  purge: irreversible, waiver (from file)" in output
     assert "irreversible tools:\n  - delete_all\n  - purge" in output
     assert "approval waivers:\n  - purge" in output
+
+
+def test_render_lists_configured_policies() -> None:
+    text = (
+        "---\n"
+        "name: guarded\n"
+        "models:\n"
+        "  default: m\n"
+        "tools:\n"
+        "  make_payment: { level: irreversible }\n"
+        "policies:\n"
+        '  - email_only_to: ["@acme.com"]\n'
+        "  - spend_limit: { max_usd: 100 }\n"
+        "---\n"
+        "Body.\n"
+    )
+    output = _render(text)
+    assert "  email_only_to: @acme.com (from file)" in output
+    assert "  spend_limit: max_usd=100 (from file)" in output
+
+
+def test_render_shows_none_when_no_policies() -> None:
+    text = (
+        "---\n"
+        "name: plain\n"
+        "models:\n"
+        "  default: m\n"
+        "tools:\n"
+        "  read_inbox: read\n"
+        "---\n"
+        "Body.\n"
+    )
+    assert "policies:\n  none (default)" in _render(text)
 
 
 def test_check_valid_file_exits_zero_and_prints_config() -> None:
