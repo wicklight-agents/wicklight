@@ -58,13 +58,23 @@ def test_irreversible_tool_requires_approval_by_default() -> None:
 
 def test_irreversible_tool_with_waiver_skips_approval() -> None:
     eff = _effective(
-        {**MINIMAL, "tools": {"delete_file": {"level": "irreversible", "waiver": True}}}
+        {
+            **MINIMAL,
+            "tools": {
+                "delete_file": {
+                    "level": "irreversible",
+                    "waive_approval": True,
+                    "reason": "scratch files only",
+                }
+            },
+        }
     )
     tool = eff.tools["delete_file"]
     assert tool.approval_required.value is False
     assert tool.approval_required.source is Source.FILE
     assert tool.waiver.value is True
     assert tool.waiver.source is Source.FILE
+    assert tool.waiver_reason.value == "scratch files only"
 
 
 def test_explicit_approval_on_write_tool_is_from_file() -> None:

@@ -633,6 +633,25 @@ async def _check_approval(
     step: int,
 ) -> CheckOutcome:
     """If the tool needs approval, request it and record the outcome."""
+    if config.is_waived(call.name):
+        # The agent file waived this tool's approval; record it for the audit
+        # trail (no human is asked) and let the call proceed.
+        waiver_reason = config.waiver_reason(call.name) or "approval waived"
+        log.emit(
+            ApprovalResolved,
+            step,
+            f"{call.name} approval waived: {waiver_reason}",
+            ApprovalResolvedPayload(
+                tool=call.name,
+                call_id=call.id,
+                approved=True,
+                by="waiver",
+                note=waiver_reason,
+                waived=True,
+            ),
+        )
+        return CheckOutcome(allowed=True)
+
     if not config.requires_approval(call.name):
         return CheckOutcome(allowed=True)
 
