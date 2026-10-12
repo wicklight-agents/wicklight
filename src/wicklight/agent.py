@@ -21,8 +21,15 @@ from uuid import uuid4
 
 from wicklight.agentfile import AgentFile, build_effective_config, parse_and_validate
 from wicklight.agentfile.config import EffectiveConfig
-from wicklight.contracts import Provider, ProviderRegistry, Tool, ToolRegistry
-from wicklight.core import RunResult, ToolCheck, run_agent
+from wicklight.contracts import (
+    PolicyError,
+    PolicyRegistry,
+    Provider,
+    ProviderRegistry,
+    Tool,
+    ToolRegistry,
+)
+from wicklight.core import ConfiguredPolicy, RunResult, ToolCheck, run_agent
 from wicklight.tools import MockWorld, mock_tools
 from wicklight.trace import TraceEvent, TraceWriter
 
@@ -59,6 +66,7 @@ class Agent:
         world: MockWorld | None = None,
         approver: object | None = None,
         checks: Sequence[ToolCheck] = (),
+        policies: Sequence[ConfiguredPolicy] | None = None,
         on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
@@ -67,6 +75,7 @@ class Agent:
         run_id = run_id or f"run_{uuid4().hex[:12]}"
         model_provider = self._resolve_provider(provider)
         tool_map = self._resolve_tools(tools, world)
+        configured_policies = self._resolve_policies(policies)
         # `approver` is accepted now for API stability; the approval gate that
         # uses it lands in M7.
         with TraceWriter(run_id, root=runs_dir) as writer:
@@ -79,6 +88,7 @@ class Agent:
                 tools=tool_map,
                 writer=writer,
                 checks=checks,
+                policies=configured_policies,
                 agent_file=self._agent_file,
                 on_event=on_event,
             )
@@ -92,6 +102,7 @@ class Agent:
         world: MockWorld | None = None,
         approver: object | None = None,
         checks: Sequence[ToolCheck] = (),
+        policies: Sequence[ConfiguredPolicy] | None = None,
         on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
@@ -112,6 +123,7 @@ class Agent:
                     world=world,
                     approver=approver,
                     checks=checks,
+                    policies=policies,
                     on_event=on_event,
                     run_id=run_id,
                     runs_dir=runs_dir,
@@ -145,3 +157,34 @@ class Agent:
         return {
             name: registry.get(name) for name in self._config.tools if name in available
         }
+
+    def _resolve_policies(
+        self, override: Sequence[ConfiguredPolicy] | None
+    ) -> list[ConfiguredPolicy]:
+        """Build the configured policies for this run, in agent-file order.
+
+        A caller may inject policies directly (for tests); otherwise they are
+        discovered and configured from the agent file's ``policies:`` list.
+        """
+        if override is not None:
+            return list(override)
+
+        entries = self._config.policies.value
+        if not entries:
+            return []
+
+        registry = PolicyRegistry.discover()
+        filename = self._agent_file.path.name if self._agent_file.path else "agent.md"
+        configured: list[ConfiguredPolicy] = []
+        for index, entry in enumerate(entries):
+            if len(entry) != 1:
+                raise PolicyError(
+                    "each policies entry must be a single '<name>: <config>' "
+                    f"mapping, got {entry!r}"
+                )
+            name = next(iter(entry))
+            policy = registry.create(name, entry[name])
+            line = self._agent_file.line_of("policies", index)
+            source = f"{filename} line {line}" if line is not None else None
+            configured.append(ConfiguredPolicy(name=name, policy=policy, source=source))
+        return configured

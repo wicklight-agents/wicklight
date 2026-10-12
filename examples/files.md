@@ -15,7 +15,7 @@ tools:
 
 policies:
   # Confine file access to one folder. Reads outside it are denied and logged.
-  - path_allowlist: ["./docs"]
+  - paths_within: ["./docs"]
 
 limits:
   max_steps: 15
