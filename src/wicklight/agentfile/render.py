@@ -8,7 +8,7 @@ sections.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from wicklight.agentfile.config import EffectiveConfig, EffectiveTool, Sourced
 from wicklight.agentfile.schema import PermissionLevel
@@ -44,6 +44,9 @@ def render_effective_config(config: EffectiveConfig) -> str:
         lines.append("  none (all tools off by default)")
     lines.append("")
 
+    lines += _render_policies(config.policies)
+    lines.append("")
+
     irreversible = [
         name
         for name, tool in config.tools.items()
@@ -65,6 +68,31 @@ def _tool_summary(tool: EffectiveTool) -> list[str]:
     if tool.waiver.value:
         parts.append("waiver")
     return parts
+
+
+def _render_policies(policies: Sourced[list[dict[str, Any]]]) -> list[str]:
+    lines = ["policies:"]
+    entries = policies.value
+    if not entries:
+        lines.append("  none (default)")
+        return lines
+    for entry in entries:
+        for name, cfg in entry.items():
+            lines.append(f"  {name}: {_policy_summary(cfg)} (from file)")
+    return lines
+
+
+def _policy_summary(cfg: Any) -> str:
+    """A compact one-line summary of a policy's config value."""
+    if isinstance(cfg, dict):
+        items = cast("dict[str, Any]", cfg).items()
+        return ", ".join(f"{key}={value}" for key, value in items) or "(no config)"
+    if isinstance(cfg, list):
+        rendered = ", ".join(str(item) for item in cast("list[Any]", cfg))
+        return rendered or "(empty)"
+    if cfg is None:
+        return "(no config)"
+    return str(cfg)
 
 
 def _tool_list(heading: str, names: list[str]) -> list[str]:
