@@ -11,7 +11,8 @@ DTN-217; the built-ins are DTN-218.
 ```python
 class Policy(Protocol):
     name: str
-    config_model: type[BaseModel]            # typed, validated config
+    config_model: type[BaseModel]  # typed, validated config
+
     def check(self, call: PolicyCall, ctx: PolicyContext) -> Allow | Deny: ...
 ```
 
