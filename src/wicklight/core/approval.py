@@ -7,15 +7,18 @@ policies pass, a call that needs approval pauses the loop until an
 cannot run tools or change arguments.
 
 Built-in approvers cover tests and headless runs: :class:`AutoApprove`,
-:class:`AutoDeny`, and :class:`ScriptedApprover`. The interactive terminal
-approver lands in DTN-222. When no approver is configured, the gate fails
-closed (:data:`REQUIRE_APPROVER`): a call that needs approval is denied rather
-than run unapproved.
+:class:`AutoDeny`, and :class:`ScriptedApprover`. :class:`TerminalApprover` is
+the interactive one used by ``wicklight run``. When no approver is configured,
+the gate fails closed (:data:`REQUIRE_APPROVER`): a call that needs approval is
+denied rather than run unapproved.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import asyncio
+import json
+import sys
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -36,6 +39,8 @@ class ApprovalRequest:
     reason: str
     arguments: Mapping[str, Any] = field(default_factory=_empty_arguments)
     call_id: str | None = None
+    #: The tool's declared risk (read/write/irreversible), for display.
+    risk: str | None = None
 
 
 @dataclass(frozen=True)
@@ -123,3 +128,68 @@ class _RequireApprover:
 
 #: Used by the loop when no approver is supplied: deny approval-required calls.
 REQUIRE_APPROVER: Approver = _RequireApprover()
+
+
+class TerminalApprover:
+    """The v1 human approver: a terminal prompt, default deny.
+
+    Shows the tool, its arguments, risk, and why approval is needed, then asks
+    ``Approve? [y/N]`` (default deny). A denial can carry an optional note back
+    to the model. The prompt has a timeout that also defaults to deny, so an
+    unattended run can't hang forever. A non-interactive run (no TTY) denies
+    immediately and says why, rather than blocking on a prompt that can't appear.
+    """
+
+    name = "terminal"
+
+    def __init__(
+        self,
+        *,
+        timeout: float | None = 300.0,
+        reader: Callable[[str], str] | None = None,
+        interactive: bool | None = None,
+    ) -> None:
+        self._timeout = timeout
+        self._reader = reader if reader is not None else input
+        self._interactive = interactive
+
+    def _is_interactive(self) -> bool:
+        if self._interactive is not None:
+            return self._interactive
+        return sys.stdin.isatty() and sys.stdout.isatty()
+
+    async def request(self, request: ApprovalRequest) -> ApprovalDecision:
+        if not self._is_interactive():
+            return Denied(
+                f"non-interactive run: cannot prompt to approve {request.tool!r}"
+            )
+
+        self._render(request)
+        try:
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(self._reader, "Approve? [y/N] "), self._timeout
+            )
+        except asyncio.TimeoutError:
+            return Denied(f"approval timed out after {self._timeout:g}s")
+
+        if answer.strip().lower() in {"y", "yes"}:
+            return Approved()
+        note = self._reader("Reason (optional): ").strip()
+        return Denied(note or "denied at the terminal")
+
+    def _render(self, request: ApprovalRequest) -> None:
+        from rich.console import Console
+        from rich.panel import Panel
+
+        args = (
+            json.dumps(dict(request.arguments), indent=2, default=str)
+            if request.arguments
+            else "(none)"
+        )
+        body = (
+            f"tool: {request.tool}\n"
+            f"risk: {request.risk or 'unknown'}\n"
+            f"why:  {request.reason}\n"
+            f"arguments:\n{args}"
+        )
+        Console().print(Panel(body, title="Approval required", border_style="yellow"))

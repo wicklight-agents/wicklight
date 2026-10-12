@@ -25,6 +25,7 @@ from wicklight.agentfile import (
     render_effective_config,
 )
 from wicklight.contracts import Capabilities, ProviderError, describe_providers
+from wicklight.core import TerminalApprover
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.tools import MockWorld
 from wicklight.trace import TraceReadError, dump_trace_event, read_trace
@@ -132,6 +133,7 @@ def run(
             task,
             provider=provider,
             world=world_state,
+            approver=TerminalApprover(),
             runs_dir=runs_dir,
             on_event=on_event,
         )

@@ -18,6 +18,7 @@ from wicklight.core.approval import (
     AutoDeny,
     Denied,
     ScriptedApprover,
+    TerminalApprover,
 )
 from wicklight.core.loop import (
     CheckOutcome,
@@ -44,6 +45,7 @@ __all__ = [
     "ProposedCall",
     "RunResult",
     "ScriptedApprover",
+    "TerminalApprover",
     "ToolCheck",
     "TraceLog",
     "run_agent",

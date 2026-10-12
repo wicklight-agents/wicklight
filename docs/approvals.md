@@ -30,17 +30,26 @@ as the instant test approvers.
 
 | Approver | Behaviour |
 | --- | --- |
+| `TerminalApprover` | the v1 human approver (DTN-222): prompts `Approve? [y/N]` at the terminal, default deny, with a timeout that also defaults to deny; used by `wicklight run` |
 | `AutoApprove` | approves everything — tests and trusted headless runs |
 | `AutoDeny(note)` | denies everything, with a fixed note |
 | `ScriptedApprover([True, False, …])` | replays decisions in order; fails closed when it runs out |
 
-The interactive terminal approver arrives in DTN-222.
+### `TerminalApprover`
+
+`wicklight run` uses it by default. It shows the tool, its pretty-printed
+arguments, risk level, and why approval is needed, then asks for a decision; a
+denial can carry an optional note back to the model. When the run is **not
+attached to a TTY** (piped output, CI), it denies immediately and says why
+rather than blocking on a prompt that can't appear. The library `agent.run()`
+default stays fail-closed (below); pass `TerminalApprover()` explicitly to opt in.
 
 ## Fail closed
 
 If a call needs approval and **no approver is configured**, the gate denies it
-(`REQUIRE_APPROVER`) rather than running it unapproved. A bare `wicklight run`
-therefore blocks approval-required calls until an approver is wired in.
+(`REQUIRE_APPROVER`) rather than running it unapproved. So `agent.run()` without
+an approver blocks approval-required calls, and a non-interactive `wicklight run`
+denies them with a clear message.
 
 ## The events
 
