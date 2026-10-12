@@ -78,3 +78,20 @@ denies them with a clear message.
 
 A denied call is never executed; the model is told it was not approved and the
 run continues. See `docs/the-loop.md` for where this sits in the pipeline.
+
+## The payment-approval demo
+
+The worked example (DTN-224) pays an invoice from the inbox with
+`examples/payments.md`, whose `make_payment` is irreversible and
+`approval: required`:
+
+```bash
+uv run wicklight run examples/payments.md "pay the invoice" \
+  --fake examples/scripts/pay_invoice.yaml \
+  --world examples/worlds/invoice.yaml --trace
+```
+
+At a terminal this pauses for `Approve? [y/N]`: `y` records the $50 payment in
+the ledger; `N` (or a non-interactive run) blocks it and tells the model. A
+payment over the `spend_limit` is denied by the policy before approval is ever
+requested, since policies run before the gate.
