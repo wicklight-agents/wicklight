@@ -12,9 +12,10 @@ from wicklight.testing.conformance import (
     ConformanceCase,
     ConformanceFactory,
     ConformanceReport,
-    Scenario,
+    ProviderScenario,
     run_provider_conformance,
 )
+from wicklight.testing.scenarios import Scenario, ScenarioResult
 from wicklight.testing.tool_conformance import run_tool_conformance
 
 __all__ = [
@@ -22,7 +23,9 @@ __all__ = [
     "ConformanceCase",
     "ConformanceFactory",
     "ConformanceReport",
+    "ProviderScenario",
     "Scenario",
+    "ScenarioResult",
     "run_provider_conformance",
     "run_tool_conformance",
 ]
