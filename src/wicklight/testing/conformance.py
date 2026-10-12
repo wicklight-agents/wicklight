@@ -26,7 +26,7 @@ from wicklight.contracts import (
 from wicklight.contracts.provider import check_contract_version
 
 
-class Scenario(str, Enum):
+class ProviderScenario(str, Enum):
     """The situations a conforming provider must handle."""
 
     PLAIN = "plain"
@@ -45,7 +45,7 @@ class ConformanceCase:
 
 
 #: Produces a fresh :class:`ConformanceCase` for a scenario.
-ConformanceFactory = Callable[[Scenario], ConformanceCase]
+ConformanceFactory = Callable[[ProviderScenario], ConformanceCase]
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ class ConformanceReport:
 
 async def run_provider_conformance(factory: ConformanceFactory) -> ConformanceReport:
     """Run the conformance kit, returning a report of every check's outcome."""
-    probe = factory(Scenario.PLAIN)
+    probe = factory(ProviderScenario.PLAIN)
     capabilities = probe.provider.capabilities
     version = probe.provider.contract_version
 
@@ -130,21 +130,21 @@ async def _run(name: str, check: Awaitable[None]) -> CheckResult:
 
 
 async def _check_plain(factory: ConformanceFactory) -> None:
-    case = factory(Scenario.PLAIN)
+    case = factory(ProviderScenario.PLAIN)
     # The contract guarantee here is simply that a plain completion succeeds;
     # response shape is covered by the usage and tool-call checks.
     await case.provider.complete(case.request)
 
 
 async def _check_usage(factory: ConformanceFactory) -> None:
-    case = factory(Scenario.PLAIN)
+    case = factory(ProviderScenario.PLAIN)
     usage = (await case.provider.complete(case.request)).usage
     if usage.input_tokens < 0 or usage.output_tokens < 0:
         raise AssertionError(f"usage reports negative tokens: {usage!r}")
 
 
 async def _check_single_tool(factory: ConformanceFactory) -> None:
-    case = factory(Scenario.SINGLE_TOOL)
+    case = factory(ProviderScenario.SINGLE_TOOL)
     response = await case.provider.complete(case.request)
     if not response.tool_calls:
         raise AssertionError("expected at least one tool call, got none")
@@ -158,7 +158,7 @@ async def _check_single_tool(factory: ConformanceFactory) -> None:
 
 
 async def _check_parallel(factory: ConformanceFactory) -> None:
-    case = factory(Scenario.PARALLEL_TOOLS)
+    case = factory(ProviderScenario.PARALLEL_TOOLS)
     response = await case.provider.complete(case.request)
     if len(response.tool_calls) < 2:
         raise AssertionError(
@@ -168,7 +168,7 @@ async def _check_parallel(factory: ConformanceFactory) -> None:
 
 
 async def _check_streaming(factory: ConformanceFactory) -> None:
-    case = factory(Scenario.STREAMING)
+    case = factory(ProviderScenario.STREAMING)
     events = [event async for event in case.provider.stream(case.request)]
     if not events:
         raise AssertionError("stream yielded no events")
@@ -178,7 +178,7 @@ async def _check_streaming(factory: ConformanceFactory) -> None:
 
 
 async def _check_error_mapping(factory: ConformanceFactory) -> None:
-    case = factory(Scenario.ERROR)
+    case = factory(ProviderScenario.ERROR)
     try:
         await case.provider.complete(case.request)
     except ProviderError:

@@ -19,16 +19,22 @@ from wicklight.contracts import (
     TextDelta,
 )
 from wicklight.providers import FakeProvider, FakeScript
-from wicklight.testing import ConformanceCase, Scenario, run_provider_conformance
+from wicklight.testing import (
+    ConformanceCase,
+    ProviderScenario,
+    run_provider_conformance,
+)
 
 _SCRIPTS = {
-    Scenario.PLAIN: "responses:\n  - text: hello\n",
-    Scenario.SINGLE_TOOL: "responses:\n  - tool_calls:\n      - name: read_inbox\n",
-    Scenario.PARALLEL_TOOLS: (
+    ProviderScenario.PLAIN: "responses:\n  - text: hello\n",
+    ProviderScenario.SINGLE_TOOL: (
+        "responses:\n  - tool_calls:\n      - name: read_inbox\n"
+    ),
+    ProviderScenario.PARALLEL_TOOLS: (
         "responses:\n  - tool_calls:\n      - name: a\n      - name: b\n"
     ),
-    Scenario.STREAMING: "responses:\n  - text: streamed hello world\n",
-    Scenario.ERROR: "responses:\n  - error: boom\n",
+    ProviderScenario.STREAMING: "responses:\n  - text: streamed hello world\n",
+    ProviderScenario.ERROR: "responses:\n  - error: boom\n",
 }
 
 
@@ -38,7 +44,7 @@ def _request() -> ModelRequest:
     )
 
 
-def _fake_factory(scenario: Scenario) -> ConformanceCase:
+def _fake_factory(scenario: ProviderScenario) -> ConformanceCase:
     provider = FakeProvider(FakeScript.from_yaml(_SCRIPTS[scenario]))
     return ConformanceCase(provider, _request())
 
@@ -60,7 +66,7 @@ class QuietProvider(FakeProvider):
 
 
 def test_capability_gated_checks_are_skipped_when_not_declared() -> None:
-    def factory(scenario: Scenario) -> ConformanceCase:
+    def factory(scenario: ProviderScenario) -> ConformanceCase:
         provider = QuietProvider(FakeScript.from_yaml(_SCRIPTS[scenario]))
         return ConformanceCase(provider, _request())
 
@@ -86,7 +92,7 @@ class BrokenProvider:
 
 
 def test_broken_provider_fails_with_clear_messages() -> None:
-    def factory(scenario: Scenario) -> ConformanceCase:
+    def factory(scenario: ProviderScenario) -> ConformanceCase:
         return ConformanceCase(BrokenProvider(), _request())
 
     report = asyncio.run(run_provider_conformance(factory))
