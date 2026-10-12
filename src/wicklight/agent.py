@@ -48,7 +48,7 @@ class Agent:
         """Load and validate an agent file, raising on any validation error."""
         path = Path(path)
         agent_file, agent_config = parse_and_validate(
-            path.read_text(encoding="utf-8"), filename=path.name
+            path.read_text(encoding="utf-8"), path=path
         )
         config = build_effective_config(agent_config, provided=agent_file.frontmatter)
         return cls(agent_file, config)

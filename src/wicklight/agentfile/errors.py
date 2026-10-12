@@ -58,29 +58,34 @@ class AgentFileValidationError(Exception):
 
 
 def parse_and_validate(
-    text: str, *, filename: str = "agent.md"
+    text: str, *, filename: str = "agent.md", path: Path | None = None
 ) -> tuple[AgentFile, AgentConfig]:
     """Parse and validate ``text``, returning both the parsed file and config.
 
     Raises :class:`AgentFileValidationError` with friendly, line-numbered
     messages on any problem. Callers that need the raw frontmatter (e.g. to
     build an effective config) use the returned :class:`AgentFile`.
+
+    Pass ``path`` when the text came from a file: it is recorded on the returned
+    :class:`AgentFile` so runtime trace citations (permission and policy denials)
+    name the real file, and its name is used in error messages.
     """
+    name = path.name if path is not None else filename
     try:
-        agent = parse_agent_file(text)
+        agent = parse_agent_file(text, path=path)
     except AgentFileError as exc:
         issue = AgentFileIssue(
-            message=_format(filename, exc.line, "", str(exc)),
+            message=_format(name, exc.line, "", str(exc)),
             line=exc.line,
             location="",
         )
-        raise AgentFileValidationError([issue], filename=filename) from exc
+        raise AgentFileValidationError([issue], filename=name) from exc
 
     try:
         config = validate_frontmatter(agent.frontmatter)
     except ValidationError as exc:
-        issues = _issues_from_validation(exc, agent, filename=filename)
-        raise AgentFileValidationError(issues, filename=filename) from exc
+        issues = _issues_from_validation(exc, agent, filename=name)
+        raise AgentFileValidationError(issues, filename=name) from exc
 
     return agent, config
 
