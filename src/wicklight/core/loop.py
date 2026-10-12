@@ -450,7 +450,7 @@ async def _handle_call(
 
     # Final stage: if the tool needs approval, pause for the approver. A denial
     # (or no approver) blocks the call and is explained to the model.
-    approval = await _check_approval(call, config, approver, log, step)
+    approval = await _check_approval(call, tool, config, approver, log, step)
     if not approval.allowed:
         return ToolResult.failure(f"blocked: {approval.reason}")
 
@@ -626,6 +626,7 @@ def _check_policies(
 
 async def _check_approval(
     call: ToolCall,
+    tool: Tool,
     config: EffectiveConfig,
     approver: Approver,
     log: TraceLog,
@@ -650,6 +651,7 @@ async def _check_approval(
             reason=reason,
             arguments=dict(call.arguments),
             call_id=call.id,
+            risk=tool.risk.value,
         )
     )
     duration_ms = (time.perf_counter() - started) * 1000
