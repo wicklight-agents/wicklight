@@ -93,8 +93,13 @@ A step, cost, or time limit was reached. **Payload:** `limit` (name),
 
 ### `error`
 Something went wrong. **Payload:** `message`, `where` (optional),
-`recoverable` (bool). *explain:* `error: provider timeout while calling the
-model`
+`recoverable` (bool), and — for provider errors (DTN-228) — `kind` (the neutral
+category: `rate_limit`, `overloaded`, `timeout`, `auth`, `invalid_request`,
+`context_too_long`, `unknown`), `attempt` and `wait_seconds` (on a retry), and
+`suggestion` (a fix on a terminal error). A retryable error (rate limit or
+overloaded) is logged `recoverable=true` with the attempt and wait before the
+core retries; nothing retries silently. *explain:* `error: rate limited (429) —
+retrying (attempt 1/2) in 1s`
 
 ### `run_finished`
 The run ended. **Payload:** `status` (`completed`, `stopped`, `limit`, or

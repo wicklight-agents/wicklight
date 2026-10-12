@@ -228,6 +228,8 @@ async def run_agent(
     max_steps = config.limits.max_steps.value
     max_cost = config.limits.max_cost.value
     timeout = config.limits.timeout.value
+    max_retries = config.limits.max_retries.value
+    retry_backoff = config.limits.retry_backoff.value
     tool_defs = _tool_definitions(tools)
     started = time.perf_counter()
 
@@ -306,17 +308,29 @@ async def run_agent(
                 f"called {model_id}",
                 ModelCalledPayload(model=model_id),
             )
+            request = ModelRequest(model=model_id, messages=messages, tools=tool_defs)
             try:
-                response = await provider.complete(
-                    ModelRequest(model=model_id, messages=messages, tools=tool_defs)
+                response = await _complete_with_retries(
+                    provider,
+                    request,
+                    max_retries=max_retries,
+                    backoff=retry_backoff,
+                    log=log,
+                    step=step,
                 )
             except ProviderError as exc:
-                # A harness error stops the run.
+                # Not retryable (or retries exhausted): stop with a clear error
+                # and, where we have one, a suggested fix.
                 log.emit(
                     ErrorEvent,
                     step,
                     f"error: {exc}",
-                    ErrorPayload(message=str(exc), where="model_called"),
+                    ErrorPayload(
+                        message=str(exc),
+                        where="model_called",
+                        kind=exc.kind.value,
+                        suggestion=exc.suggestion,
+                    ),
                 )
                 status = RunStatus.ERROR
                 break
@@ -733,6 +747,48 @@ def _emit_policy(
             source=source,
         ),
     )
+
+
+async def _complete_with_retries(
+    provider: Provider,
+    request: ModelRequest,
+    *,
+    max_retries: int,
+    backoff: float,
+    log: TraceLog,
+    step: int,
+) -> ModelResponse:
+    """Call the provider, retrying retryable errors with visible backoff.
+
+    Only rate-limit and overloaded errors retry (per ``ProviderError.retryable``).
+    Each retry is recorded as a recoverable ``error`` event with the attempt
+    number and the wait — nothing retries silently. A non-retryable error, or
+    the last attempt, is re-raised for the caller to record as terminal.
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return await provider.complete(request)
+        except ProviderError as exc:
+            if not (exc.retryable and attempt <= max_retries):
+                raise
+            wait = backoff * (2 ** (attempt - 1))
+            log.emit(
+                ErrorEvent,
+                step,
+                f"error: {exc} — retrying (attempt {attempt}/{max_retries}) "
+                f"in {wait:g}s",
+                ErrorPayload(
+                    message=str(exc),
+                    where="model_called",
+                    recoverable=True,
+                    kind=exc.kind.value,
+                    attempt=attempt,
+                    wait_seconds=wait,
+                ),
+            )
+            await asyncio.sleep(wait)
 
 
 def _tool_definitions(tools: Mapping[str, Tool]) -> list[ToolDefinition]:

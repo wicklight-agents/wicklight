@@ -83,6 +83,10 @@ class Limits(BaseModel):
     max_steps: int | None = None
     max_cost: float | None = None
     timeout: float | None = None
+    # How many times the core retries a retryable provider error (rate limit,
+    # overloaded), and the base seconds for exponential backoff between tries.
+    max_retries: int | None = None
+    retry_backoff: float | None = None
 
 
 class AgentConfig(BaseModel):

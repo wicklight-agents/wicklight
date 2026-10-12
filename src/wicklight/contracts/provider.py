@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
+from enum import Enum
 from importlib.metadata import EntryPoint, entry_points
 from typing import Protocol, runtime_checkable
 
@@ -23,8 +24,57 @@ from wicklight.contracts.version import CONTRACT_VERSION
 PROVIDER_ENTRY_POINT_GROUP = "wicklight.providers"
 
 
+class ProviderErrorKind(str, Enum):
+    """Neutral categories every provider's errors map to, so the core can react
+    the same way regardless of which API raised them."""
+
+    RATE_LIMIT = "rate_limit"
+    OVERLOADED = "overloaded"
+    TIMEOUT = "timeout"
+    AUTH = "auth"
+    INVALID_REQUEST = "invalid_request"
+    CONTEXT_TOO_LONG = "context_too_long"
+    UNKNOWN = "unknown"
+
+
+# Only transient load errors are retried — per the brief, rate limit and
+# overloaded only. Auth/invalid/context errors won't fix themselves on a retry.
+_RETRYABLE_KINDS = frozenset(
+    {ProviderErrorKind.RATE_LIMIT, ProviderErrorKind.OVERLOADED}
+)
+
+# A suggested fix shown with a terminal error, when the kind implies one.
+_DEFAULT_SUGGESTIONS: dict[ProviderErrorKind, str] = {
+    ProviderErrorKind.AUTH: "check the provider's API key (e.g. ANTHROPIC_API_KEY)",
+    ProviderErrorKind.CONTEXT_TOO_LONG: "shorten the prompt or lower max_steps",
+    ProviderErrorKind.INVALID_REQUEST: (
+        "the provider rejected the request; check the model id and arguments"
+    ),
+}
+
+
 class ProviderError(Exception):
-    """Raised when a provider cannot be loaded, version-checked, or resolved."""
+    """Raised when a provider cannot be loaded, resolved, or completes a call.
+
+    ``kind`` places the failure in a neutral category so the core can decide
+    whether to retry (:attr:`retryable`) and what fix to suggest. Loader and
+    resolver errors use the default ``UNKNOWN`` kind.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: ProviderErrorKind = ProviderErrorKind.UNKNOWN,
+        suggestion: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.suggestion = suggestion or _DEFAULT_SUGGESTIONS.get(kind)
+
+    @property
+    def retryable(self) -> bool:
+        return self.kind in _RETRYABLE_KINDS
 
 
 class Capabilities(BaseModel):

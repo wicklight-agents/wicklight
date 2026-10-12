@@ -25,6 +25,7 @@ from wicklight.contracts import (
     ModelRequest,
     ModelResponse,
     ProviderError,
+    ProviderErrorKind,
     Role,
     StopReason,
     StreamDone,
@@ -59,6 +60,9 @@ class ScriptedResponse(BaseModel):
     text: str = ""
     tool_calls: list[ScriptedToolCall] = []
     error: str | None = None
+    # The neutral error kind to raise with (e.g. "rate_limit"), so scripts can
+    # exercise the core's retry and error-mapping paths.
+    error_kind: ProviderErrorKind = ProviderErrorKind.UNKNOWN
     delay: float = 0.0
     stop_reason: StopReason | None = None
 
@@ -147,7 +151,8 @@ class FakeProvider:
     def _raise_if_error(self, step: ScriptedResponse) -> None:
         if step.error is not None:
             raise ProviderError(
-                f"fake provider error (script step {self._index}): {step.error}"
+                f"fake provider error (script step {self._index}): {step.error}",
+                kind=step.error_kind,
             )
 
     def _response(self, step: ScriptedResponse, request: ModelRequest) -> ModelResponse:

@@ -32,6 +32,7 @@ limits:
   max_steps: 20 (from file)
   max_cost: $1.00 (default)
   timeout: 300s (default)
+  retries: 2 (default)
 
 tools:
   read_inbox: read (from file)
