@@ -7,6 +7,11 @@ wicklight-solution-brief.md
 # Agent run traces (written to ./runs by `wicklight run`)
 runs/
 
+# API keys / secrets must never be committed — they belong in env vars.
+docs/claude-api-key
+*.key
+*api-key*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
