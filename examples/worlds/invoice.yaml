@@ -1,0 +1,10 @@
+# A fake invoice waiting in the inbox, for the payment-approval demo (DTN-224).
+# The ledger starts empty; a payment is only recorded if a human approves it.
+inbox:
+  - sender: billing@acme-corp.example
+    subject: "Invoice #4172 — $50.00 due"
+    body: >
+      Invoice #4172 from Acme Corp. Amount due: $50.00. Please remit payment to
+      Acme Corp at your earliest convenience.
+
+ledger: []

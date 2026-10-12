@@ -1,0 +1,17 @@
+# The scripted model pays the invoice from the inbox (DTN-224).
+#
+# make_payment is irreversible and approval: required, so the loop pauses for a
+# human — `y` approves and the payment is recorded; `N` (or a non-interactive
+# run) blocks it and the model is told. $50 is under the spend_limit, so the
+# policy lets it through to the approval gate.
+responses:
+  - tool_calls:
+      - name: make_payment
+        arguments:
+          payee: "Acme Corp"
+          amount_usd: 50
+          memo: "Invoice #4172"
+
+  - text: >
+      I submitted the $50.00 payment to Acme Corp for invoice #4172. If it was
+      approved it is now recorded; otherwise it was blocked and nothing was paid.
