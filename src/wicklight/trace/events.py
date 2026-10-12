@@ -55,6 +55,9 @@ class RunStartedPayload(_Payload):
 
 class ContextBuiltPayload(_Payload):
     message_count: int
+    # Indices of the messages that are untrusted (tool results and the model's
+    # own turns). Recorded so `explain` (M9) can show which spans are data.
+    untrusted: list[int] = []
     # Content-addressed reference to the full context, stored once in the blob
     # store (DTN-200) to keep the trace small and readable.
     content_ref: str | None = None

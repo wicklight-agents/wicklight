@@ -41,8 +41,9 @@ A run has begun. **Payload:** `agent` (name), `agent_file` (path, optional).
 
 ### `context_built`
 The context (instructions plus history) was assembled for a step. **Payload:**
-`message_count`, `content_ref` (hash of the full context in the blob store,
-optional). *explain:* `built context with 4 messages`
+`message_count`, `untrusted` (indices of the untrusted messages — tool results
+and the model's own turns; DTN-219), `content_ref` (hash of the full context in
+the blob store, optional). *explain:* `built context with 4 messages (2 untrusted)`
 
 ### `model_routed`
 The router chose a model and logged which rule matched. **Payload:** `model`,

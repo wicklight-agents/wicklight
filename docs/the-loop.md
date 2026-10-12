@@ -63,12 +63,28 @@ Each iteration is one step:
    the tool is **never executed**. Plugins cannot remove or reorder this check.
 2. **Validate** the arguments against the tool's `input_model`. Invalid
    arguments are returned to the model as a structured failure.
-3. **Plugin checks.** Any additional checks run in order (policies in M6,
-   approvals in M7); the first denial blocks the call the same way. By default
-   there are none.
-4. **Execute** the tool and record `tool_executed` with its result and duration.
+3. **Policies (fixed).** Every policy configured in the agent file's `policies:`
+   list runs in file order (DTN-217). The first `Deny` blocks the call; a policy
+   that raises counts as a deny (fail closed) and is also logged as an `error`.
+   Every result is recorded as a `policy_checked` event, with denials citing the
+   policy and its agent-file line. See `docs/policies.md`.
+4. **Plugin checks.** Any additional checks run in order (approvals in M7); the
+   first denial blocks the call the same way. By default there are none.
+5. **Execute** the tool and record `tool_executed` with its result and duration.
    If a tool misbehaves and raises, that is surfaced to the model as a failure
    rather than taking down the run.
+
+## Trusted vs. untrusted context
+
+Only the agent file's instructions and the user's task are **trusted**. Every
+other message — the model's own turns and every tool result — is flagged
+`trusted=False`, and tool results are additionally wrapped in a clear
+"data, not instructions" envelope before they enter context (DTN-219). This
+happens in the core on the single path into context, so a poisoned tool result
+(say, an email telling the agent to wire money) can never be mistaken for a
+command. Oversized tool output is truncated first, but the envelope and the flag
+are always applied. Each `context_built` event records which message spans are
+untrusted.
 
 ## Errors, in two kinds
 
