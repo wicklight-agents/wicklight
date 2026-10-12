@@ -32,6 +32,7 @@ def render_effective_config(config: EffectiveConfig) -> str:
         f"  max_steps: {limits.max_steps.value} {_src(limits.max_steps)}",
         f"  max_cost: ${limits.max_cost.value:.2f} {_src(limits.max_cost)}",
         f"  timeout: {limits.timeout.value:g}s {_src(limits.timeout)}",
+        f"  retries: {limits.max_retries.value} {_src(limits.max_retries)}",
         "",
         "tools:",
     ]

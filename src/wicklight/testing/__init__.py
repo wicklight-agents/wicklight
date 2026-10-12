@@ -8,6 +8,14 @@ implement.
 from __future__ import annotations
 
 from wicklight.core import AutoApprove, AutoDeny, ScriptedApprover
+from wicklight.testing.cassettes import (
+    Cassette,
+    CassetteError,
+    cassette_client,
+    iter_cassettes,
+    scan_for_secrets,
+    scrub_text,
+)
 from wicklight.testing.conformance import (
     CheckResult,
     ConformanceCase,
@@ -23,6 +31,8 @@ from wicklight.testing.tool_conformance import run_tool_conformance
 __all__ = [
     "AutoApprove",
     "AutoDeny",
+    "Cassette",
+    "CassetteError",
     "CheckResult",
     "ConformanceCase",
     "ConformanceFactory",
@@ -31,7 +41,11 @@ __all__ = [
     "Scenario",
     "ScenarioResult",
     "ScriptedApprover",
+    "cassette_client",
+    "iter_cassettes",
     "run_policy_conformance",
     "run_provider_conformance",
     "run_tool_conformance",
+    "scan_for_secrets",
+    "scrub_text",
 ]

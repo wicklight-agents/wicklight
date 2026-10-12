@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.example.com/v1/messages",
+        "body": "{\"model\": \"demo-model\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]}"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\": \"msg_demo\", \"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Hello from the cassette!\"}], \"stop_reason\": \"end_turn\", \"usage\": {\"input_tokens\": 8, \"output_tokens\": 5}}"
+      }
+    }
+  ]
+}

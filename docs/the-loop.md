@@ -97,8 +97,12 @@ untrusted.
 - **Tool errors** (unknown tool, bad arguments, a tool returning a failure, or a
   misbehaving tool) go back to the model as structured `ToolResult` failures, so
   it can recover. The run continues.
-- **Harness errors** (a provider failure today) stop the run with an `error`
-  event and status `error`.
+- **Harness errors** (a provider failure) map to a neutral kind (DTN-228). A
+  retryable one — rate limit or overloaded — is retried with visible backoff:
+  each attempt is a `recoverable` `error` event recording the kind, attempt
+  number, and wait, up to the agent file's `max_retries`. Anything else (auth,
+  invalid request, …), or exhausted retries, stops the run with a terminal
+  `error` event and status `error`, carrying a suggested fix where there is one.
 
 ## The end
 

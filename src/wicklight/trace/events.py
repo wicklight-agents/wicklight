@@ -134,6 +134,13 @@ class ErrorPayload(_Payload):
     message: str
     where: str | None = None
     recoverable: bool = False
+    # For provider errors (DTN-228): the neutral error kind, and — on a retry —
+    # the attempt number and how long the core waited before retrying. A
+    # terminal error may carry a suggested fix.
+    kind: str | None = None
+    attempt: int | None = None
+    wait_seconds: float | None = None
+    suggestion: str | None = None
 
 
 class RunFinishedPayload(_Payload):

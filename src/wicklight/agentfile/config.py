@@ -33,6 +33,10 @@ DEFAULT_MAX_STEPS = 20
 DEFAULT_MAX_COST_USD = 1.0
 #: Default wall-clock timeout for a run, in seconds.
 DEFAULT_TIMEOUT_SECONDS = 300.0
+#: Default number of retries for a retryable provider error.
+DEFAULT_MAX_RETRIES = 2
+#: Default base seconds for exponential backoff between retries.
+DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 
 _T = TypeVar("_T")
 
@@ -78,6 +82,8 @@ class EffectiveLimits:
     max_steps: Sourced[int]
     max_cost: Sourced[float]
     timeout: Sourced[float]
+    max_retries: Sourced[int]
+    retry_backoff: Sourced[float]
 
 
 @dataclass(frozen=True)
@@ -184,6 +190,13 @@ def _effective_limits(config: AgentConfig) -> EffectiveLimits:
         ),
         timeout=_sourced_or_default(
             None if limits is None else limits.timeout, DEFAULT_TIMEOUT_SECONDS
+        ),
+        max_retries=_sourced_or_default(
+            None if limits is None else limits.max_retries, DEFAULT_MAX_RETRIES
+        ),
+        retry_backoff=_sourced_or_default(
+            None if limits is None else limits.retry_backoff,
+            DEFAULT_RETRY_BACKOFF_SECONDS,
         ),
     )
 
