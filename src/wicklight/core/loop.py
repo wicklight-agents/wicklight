@@ -20,15 +20,21 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from pydantic import BaseModel, ValidationError
 
 from wicklight.agentfile import AgentFile, PermissionLevel
 from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import (
+    Allow,
+    Deny,
     Message,
     ModelRequest,
     ModelResponse,
+    Policy,
+    PolicyCall,
+    PolicyContext,
     Provider,
     ProviderError,
     Role,
@@ -151,6 +157,20 @@ ToolCheck = Callable[[ProposedCall], Awaitable[CheckOutcome]]
 
 
 @dataclass(frozen=True)
+class ConfiguredPolicy:
+    """A policy as wired into a run: its instance and where it came from.
+
+    ``source`` is the human-readable origin for deny citations, e.g.
+    ``"agent.md line 9"``; it is computed once from the agent file when the
+    policies are resolved.
+    """
+
+    name: str
+    policy: Policy
+    source: str | None = None
+
+
+@dataclass(frozen=True)
 class RunResult:
     """The outcome of a run."""
 
@@ -182,12 +202,14 @@ async def run_agent(
     tools: Mapping[str, Tool],
     writer: TraceWriter,
     checks: Sequence[ToolCheck] = (),
+    policies: Sequence[ConfiguredPolicy] = (),
     ctx: ToolContext | None = None,
     agent_file: AgentFile | None = None,
     on_event: Callable[[TraceEvent], None] | None = None,
 ) -> RunResult:
     """Run an agent to completion, recording every step to the trace."""
     log = TraceLog(writer, run_id, on_event)
+    agent_dir = _agent_dir(agent_file)
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
     model_id = config.models.default.value
     max_steps = config.limits.max_steps.value
@@ -205,6 +227,8 @@ async def run_agent(
 
     history: list[Message] = []
     usage = Usage()
+    # Running total of money spent by executed tool calls, for spend policies.
+    spent_usd = 0.0
     output = ""
     status = RunStatus.COMPLETED
     step = 0
@@ -319,9 +343,25 @@ async def run_agent(
                         tool=call.name, call_id=call.id, arguments=call.arguments
                     ),
                 )
-                result = await _handle_call(
-                    call, tools, checks, config, ctx, log, step, agent_file
+                pctx = PolicyContext(
+                    run_id=run_id,
+                    spent_usd=spent_usd,
+                    agent_dir=agent_dir,
                 )
+                result = await _handle_call(
+                    call,
+                    tools,
+                    checks,
+                    policies,
+                    pctx,
+                    config,
+                    ctx,
+                    log,
+                    step,
+                    agent_file,
+                )
+                if result.ok:
+                    spent_usd += _call_amount(call.arguments)
                 history.append(
                     Message(
                         role=Role.TOOL,
@@ -358,6 +398,8 @@ async def _handle_call(
     call: ToolCall,
     tools: Mapping[str, Tool],
     checks: Sequence[ToolCheck],
+    policies: Sequence[ConfiguredPolicy],
+    pctx: PolicyContext,
     config: EffectiveConfig,
     ctx: ToolContext,
     log: TraceLog,
@@ -377,8 +419,14 @@ async def _handle_call(
         detail = exc.errors()[0]["msg"]
         return _failed(log, step, call, f"invalid arguments for {call.name}: {detail}")
 
-    # Then any plugin checks (policies in M6, approvals in M7). A denied call is
-    # never executed; the check records why in the trace.
+    # After permissions, every configured policy runs in agent-file order. A
+    # deny (or a crash — fail closed) blocks the call; the result is recorded.
+    policy_outcome = _check_policies(call, tool, policies, pctx, log, step)
+    if not policy_outcome.allowed:
+        return ToolResult.failure(f"blocked: {policy_outcome.reason}")
+
+    # Then any plugin checks (approvals in M7). A denied call is never executed;
+    # the check records why in the trace.
     proposed = ProposedCall(call, tool, tool_input, step, config, log)
     for check in checks:
         outcome = await check(proposed)
@@ -472,6 +520,113 @@ def _permission_source(agent_file: AgentFile | None, tool_name: str) -> str | No
         return None
     filename = agent_file.path.name if agent_file.path else "agent.md"
     return f"{filename} line {line}"
+
+
+def _agent_dir(agent_file: AgentFile | None) -> Path | None:
+    if agent_file is None or agent_file.path is None:
+        return None
+    return agent_file.path.parent
+
+
+#: Argument names a monetary amount may appear under, for per-run spend tracking.
+_AMOUNT_ARGS = ("amount_usd", "amount", "usd")
+
+
+def _call_amount(arguments: Mapping[str, object]) -> float:
+    """The monetary amount a call carries, for spend tracking (0 if none)."""
+    for key in _AMOUNT_ARGS:
+        value = arguments.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+    return 0.0
+
+
+def _check_policies(
+    call: ToolCall,
+    tool: Tool,
+    policies: Sequence[ConfiguredPolicy],
+    pctx: PolicyContext,
+    log: TraceLog,
+    step: int,
+) -> CheckOutcome:
+    """Run every configured policy in order; the first deny blocks the call.
+
+    A policy that raises counts as a deny (fail closed) and is also recorded as
+    an error, so a buggy policy can never silently let a call through.
+    """
+    pcall = PolicyCall(tool=call.name, arguments=dict(call.arguments), risk=tool.risk)
+    for configured in policies:
+        # A buggy policy may return something other than Allow/Deny at runtime,
+        # so treat the result as opaque and verify it below (fail closed).
+        decision: object
+        try:
+            decision = cast("object", configured.policy.check(pcall, pctx))
+        except Exception as exc:  # noqa: BLE001 - fail closed; recorded, not swallowed
+            reason = f"policy {configured.name!r} crashed: {exc}"
+            log.emit(
+                ErrorEvent,
+                step,
+                f"policy {configured.name} crashed: {exc}",
+                ErrorPayload(
+                    message=str(exc),
+                    where=f"policy:{configured.name}",
+                    recoverable=False,
+                ),
+            )
+            _emit_policy(log, step, call, configured.name, reason, configured.source)
+            return CheckOutcome(allowed=False, reason=reason)
+
+        if isinstance(decision, Deny):
+            _emit_policy(
+                log, step, call, configured.name, decision.reason, configured.source
+            )
+            return CheckOutcome(allowed=False, reason=decision.reason)
+
+        if not isinstance(decision, Allow):
+            # A policy must return Allow or Deny; anything else is a bug, so fail
+            # closed rather than trust it.
+            reason = f"policy {configured.name!r} returned an invalid decision"
+            _emit_policy(log, step, call, configured.name, reason, configured.source)
+            return CheckOutcome(allowed=False, reason=reason)
+
+        log.emit(
+            PolicyChecked,
+            step,
+            f"allowed: {call.name} by policy {configured.name}",
+            PolicyCheckedPayload(
+                tool=call.name,
+                policy=configured.name,
+                decision=Decision.ALLOW,
+                source=configured.source,
+            ),
+        )
+    return CheckOutcome(allowed=True)
+
+
+def _emit_policy(
+    log: TraceLog,
+    step: int,
+    call: ToolCall,
+    name: str,
+    reason: str,
+    source: str | None,
+) -> None:
+    """Record a policy deny, citing the policy name and its agent-file line."""
+    explain = f"blocked: {call.name} by policy {name} — {reason}"
+    if source:
+        explain += f" ({source})"
+    log.emit(
+        PolicyChecked,
+        step,
+        explain,
+        PolicyCheckedPayload(
+            tool=call.name,
+            policy=name,
+            decision=Decision.DENY,
+            reason=reason,
+            source=source,
+        ),
+    )
 
 
 def _tool_definitions(tools: Mapping[str, Tool]) -> list[ToolDefinition]:

@@ -38,6 +38,9 @@ fake = "wicklight.providers.fake:FakeProvider"
 
 [project.entry-points."wicklight.policies"]
 block_tools = "wicklight.policies.block_tools:BlockTools"
+email_only_to = "wicklight.policies.email_only_to:EmailOnlyTo"
+paths_within = "wicklight.policies.paths_within:PathsWithin"
+spend_limit = "wicklight.policies.spend_limit:SpendLimit"
 
 [project.entry-points.pytest11]
 wicklight_conformance = "wicklight._pytest_plugin"

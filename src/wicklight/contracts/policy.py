@@ -159,11 +159,17 @@ class PolicyRegistry:
             raise PolicyError(f"unknown policy {name!r}; available: {available}")
         return factory
 
-    def create(self, name: str, config: Mapping[str, Any] | None = None) -> Policy:
-        """Build a configured policy by name, validating its config first."""
+    def create(self, name: str, config: Any = None) -> Policy:
+        """Build a configured policy by name, validating its config first.
+
+        ``config`` is the raw agent-file value for the policy — usually a
+        mapping, but a policy may accept a list or scalar via its config model
+        (e.g. ``email_only_to: ["@acme.com"]``). ``None`` means no config.
+        """
         factory = self.get(name)
+        data: Any = {} if config is None else config
         try:
-            validated = factory.config_model.model_validate(dict(config or {}))
+            validated = factory.config_model.model_validate(data)
         except Exception as exc:
             raise PolicyError(f"invalid config for policy {name!r}: {exc}") from exc
         return factory(validated)

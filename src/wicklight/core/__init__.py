@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from wicklight.core.loop import (
     CheckOutcome,
+    ConfiguredPolicy,
     ProposedCall,
     RunResult,
     ToolCheck,
@@ -18,6 +19,7 @@ from wicklight.core.loop import (
 
 __all__ = [
     "CheckOutcome",
+    "ConfiguredPolicy",
     "ProposedCall",
     "RunResult",
     "ToolCheck",
