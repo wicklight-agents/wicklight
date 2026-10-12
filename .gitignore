@@ -4,6 +4,9 @@
 # Private implementation docs (not part of the repo)
 wicklight-solution-brief.md
 
+# Agent run traces (written to ./runs by `wicklight run`)
+runs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
