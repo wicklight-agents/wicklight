@@ -137,7 +137,7 @@ class _CostlyProvider:
     """Reports a cost on every call and always wants another tool call."""
 
     contract_version = "1.0"
-    capabilities = Capabilities()
+    capabilities = Capabilities(tool_calls=True)
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         return ModelResponse(

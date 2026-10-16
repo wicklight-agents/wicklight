@@ -90,6 +90,7 @@ class AnthropicProvider:
 
     contract_version = CONTRACT_VERSION
     capabilities = Capabilities(
+        tool_calls=True,
         parallel_tool_calls=True,
         streaming=True,
         max_context_tokens=200_000,

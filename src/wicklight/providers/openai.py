@@ -83,6 +83,7 @@ class OpenAIProvider:
 
     contract_version = CONTRACT_VERSION
     capabilities = Capabilities(
+        tool_calls=True,
         parallel_tool_calls=True,
         streaming=True,
         structured_output=True,

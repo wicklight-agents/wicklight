@@ -40,7 +40,7 @@ class CapturingProvider:
     """A FakeProvider that records the messages of every request it receives."""
 
     contract_version = "1.0"
-    capabilities = Capabilities()
+    capabilities = Capabilities(tool_calls=True)
 
     def __init__(self, script: str) -> None:
         self._inner = FakeProvider(FakeScript.from_yaml(script))

@@ -88,7 +88,7 @@ class _InterruptingProvider:
     """Simulates Ctrl+C landing during a model call."""
 
     contract_version = "1.0"
-    capabilities = Capabilities()
+    capabilities = Capabilities(tool_calls=True)
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         raise KeyboardInterrupt

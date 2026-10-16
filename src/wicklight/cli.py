@@ -27,6 +27,7 @@ from wicklight.agentfile import (
 from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import Capabilities, ProviderError, describe_providers
 from wicklight.core import TerminalApprover
+from wicklight.preflight import preflight
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.providers.credentials import required_keys
 from wicklight.tools import MockWorld
@@ -91,6 +92,25 @@ def check(
     typer.echo(render_effective_config(effective))
     typer.echo("")
     typer.echo(_render_api_keys(effective))
+    typer.echo("")
+    if _report_capabilities(effective, agent):
+        raise typer.Exit(code=1)
+
+
+def _report_capabilities(config: EffectiveConfig, agent: object) -> bool:
+    """Print the capability preflight; return True if a fatal issue was found."""
+    from wicklight.agentfile import AgentFile
+
+    agent_file = agent if isinstance(agent, AgentFile) else None
+    issues = preflight(config, agent_file)
+    typer.echo("capabilities:")
+    if not issues:
+        typer.echo("  ok")
+        return False
+    for issue in issues:
+        label = "error" if issue.fatal else "warning"
+        typer.echo(f"  {label}: {issue.message}", err=True)
+    return any(issue.fatal for issue in issues)
 
 
 def _render_api_keys(config: EffectiveConfig) -> str:
