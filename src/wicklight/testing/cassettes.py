@@ -35,6 +35,7 @@ __all__ = [
     "CassetteError",
     "cassette_client",
     "iter_cassettes",
+    "replay_transport",
     "scan_for_secrets",
     "scrub_text",
 ]
@@ -172,6 +173,16 @@ class _ReplayTransport(httpx.MockTransport):
             f"no recorded interaction for {method} {url} in {self._cassette_path}; "
             f"re-record with --record"
         )
+
+
+def replay_transport(path: str | Path) -> httpx.MockTransport:
+    """A transport that replays a cassette offline, for injecting into a client.
+
+    Lets an adapter's tests drive it through recorded fixtures without the
+    ``cassette_client`` context manager — pass this as an ``AsyncClient``'s
+    ``transport``.
+    """
+    return _ReplayTransport(Cassette.load(path))
 
 
 class _RecordingTransport(httpx.AsyncBaseTransport):

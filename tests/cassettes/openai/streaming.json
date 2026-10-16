@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "body": ""
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\": \"chatcmpl-s\", \"object\": \"chat.completion.chunk\", \"model\": \"gpt-4o\", \"choices\": [{\"index\": 0, \"delta\": {\"role\": \"assistant\", \"content\": \"\"}, \"finish_reason\": null}]}\n\ndata: {\"choices\": [{\"index\": 0, \"delta\": {\"content\": \"streamed \"}, \"finish_reason\": null}]}\n\ndata: {\"choices\": [{\"index\": 0, \"delta\": {\"content\": \"hello world\"}, \"finish_reason\": null}]}\n\ndata: {\"choices\": [{\"index\": 0, \"delta\": {}, \"finish_reason\": \"stop\"}]}\n\ndata: {\"choices\": [], \"usage\": {\"prompt_tokens\": 10, \"completion_tokens\": 5, \"total_tokens\": 15}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

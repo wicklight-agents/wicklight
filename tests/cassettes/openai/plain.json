@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "body": ""
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\": \"chatcmpl-plain\", \"object\": \"chat.completion\", \"model\": \"gpt-4o\", \"choices\": [{\"index\": 0, \"message\": {\"role\": \"assistant\", \"content\": \"Hello! How can I help?\"}, \"finish_reason\": \"stop\"}], \"usage\": {\"prompt_tokens\": 11, \"completion_tokens\": 7, \"total_tokens\": 18}}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "body": ""
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\": \"chatcmpl-par\", \"object\": \"chat.completion\", \"model\": \"gpt-4o\", \"choices\": [{\"index\": 0, \"message\": {\"role\": \"assistant\", \"content\": null, \"tool_calls\": [{\"id\": \"call_a\", \"type\": \"function\", \"function\": {\"name\": \"a\", \"arguments\": \"{\\\"x\\\": 1}\"}}, {\"id\": \"call_b\", \"type\": \"function\", \"function\": {\"name\": \"b\", \"arguments\": \"{\\\"y\\\": 2}\"}}]}, \"finish_reason\": \"tool_calls\"}], \"usage\": {\"prompt_tokens\": 60, \"completion_tokens\": 28, \"total_tokens\": 88}}"
+      }
+    }
+  ]
+}

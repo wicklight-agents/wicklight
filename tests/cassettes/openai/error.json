@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "body": ""
+      },
+      "response": {
+        "status_code": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"error\": {\"message\": \"you must provide a model parameter\", \"type\": \"invalid_request_error\", \"code\": null}}"
+      }
+    }
+  ]
+}

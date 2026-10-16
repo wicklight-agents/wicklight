@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:11434/v1/chat/completions",
+        "body": ""
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\": \"chatcmpl-2\", \"object\": \"chat.completion\", \"model\": \"llama3.1\", \"choices\": [{\"index\": 0, \"message\": {\"role\": \"assistant\", \"content\": null, \"tool_calls\": [{\"id\": \"call_1\", \"type\": \"function\", \"function\": {\"name\": \"read_inbox\", \"arguments\": \"{}\"}}]}, \"finish_reason\": \"tool_calls\"}], \"usage\": {\"prompt_tokens\": 30, \"completion_tokens\": 10, \"total_tokens\": 40}}"
+      }
+    }
+  ]
+}

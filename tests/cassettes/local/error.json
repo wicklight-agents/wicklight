@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:11434/v1/chat/completions",
+        "body": ""
+      },
+      "response": {
+        "status_code": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"error\": {\"message\": \"model 'nope' not found\", \"type\": \"api_error\"}}"
+      }
+    }
+  ]
+}
