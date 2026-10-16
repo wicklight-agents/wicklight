@@ -34,7 +34,10 @@ class OpenAICompatibleProvider(OpenAIProvider):
     """
 
     provider_name = "local"
-    capabilities = Capabilities(streaming=True)
+    # Tool calling is declared because the common local models (e.g. llama3.1 via
+    # Ollama) support it; parallel calls and structured output are not assumed.
+    # Per-endpoint capability overrides arrive in DTN-268.
+    capabilities = Capabilities(tool_calls=True, streaming=True)
 
     def __init__(
         self,

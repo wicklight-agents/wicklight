@@ -28,6 +28,11 @@ output, usage).
   `config.limits.max_steps`, and the tool definitions (name, description, JSON
   Schema) are built once from the offered tools.
 - A `run_started` event is emitted at step 0.
+- **Preflight (DTN-232).** Before the first model call, the loop compares the
+  agent's static needs (tools enabled, estimated context size) against the
+  provider's declared capabilities. A mismatch stops the run immediately with an
+  `error` event (`where: "preflight"`) and status `error` — the same check
+  `wicklight check` runs, so these fail at check time, not mid-run.
 
 ## The loop body
 

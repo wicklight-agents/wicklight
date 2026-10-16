@@ -82,6 +82,9 @@ class Capabilities(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: Whether the provider can call tools at all. An agent that enables tools
+    #: needs this; parallel_tool_calls is the stronger, separate claim.
+    tool_calls: bool = False
     parallel_tool_calls: bool = False
     max_context_tokens: int | None = None
     streaming: bool = False

@@ -88,7 +88,9 @@ class FakeProvider:
     """A provider that replays a :class:`FakeScript`."""
 
     contract_version = CONTRACT_VERSION
-    capabilities = Capabilities(streaming=True, parallel_tool_calls=True)
+    capabilities = Capabilities(
+        tool_calls=True, parallel_tool_calls=True, streaming=True
+    )
 
     def __init__(self, script: FakeScript | None = None) -> None:
         self._script = script

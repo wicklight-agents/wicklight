@@ -116,9 +116,11 @@ def test_check_valid_file_exits_zero_and_prints_config(
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     result = runner.invoke(app, ["check", str(INBOX)])
     assert result.exit_code == 0
-    # The effective config is printed, followed by the api-keys report.
+    # The effective config is printed, followed by the api-keys and capability
+    # reports.
     assert INBOX_SNAPSHOT in result.output
     assert "api keys:\n  ANTHROPIC_API_KEY: MISSING (for anthropic)" in result.output
+    assert "capabilities:\n  ok" in result.output
 
 
 def test_check_reports_a_set_key_without_printing_it(

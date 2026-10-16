@@ -52,6 +52,7 @@ from wicklight.core.approval import (
     Approved,
     Approver,
 )
+from wicklight.preflight import run_capability_issues
 from wicklight.trace import (
     ApprovalRequested,
     ApprovalRequestedPayload,
@@ -239,6 +240,32 @@ async def run_agent(
         f"run started for agent {config.name.value}",
         RunStartedPayload(agent=config.name.value),
     )
+
+    # Preflight: fail before the first model call if the provider can't do what
+    # the agent needs (tool calling, context size) — the same check as `check`.
+    issues = run_capability_issues(config, provider.capabilities, agent_file)
+    if issues:
+        detail = "; ".join(issue.message for issue in issues)
+        log.emit(
+            ErrorEvent,
+            0,
+            f"error: {detail}",
+            ErrorPayload(message=detail, where="preflight"),
+        )
+        log.emit(
+            RunFinished,
+            0,
+            "run finished: error in 0 steps",
+            RunFinishedPayload(status=RunStatus.ERROR, steps=0),
+        )
+        return RunResult(
+            run_id=run_id,
+            status=RunStatus.ERROR,
+            steps=0,
+            output="",
+            usage=Usage(),
+            trace_path=writer.path,
+        )
 
     history: list[Message] = []
     usage = Usage()
