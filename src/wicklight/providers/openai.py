@@ -98,18 +98,20 @@ class OpenAIProvider:
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: float = 60.0,
         requires_key: bool = True,
+        chat_path: str = CHAT_COMPLETIONS_PATH,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url
         self._transport = transport
         self._timeout = timeout
         self._requires_key = requires_key
+        self._chat_path = chat_path
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         body = request_body(request, stream=False)
         async with self._client() as client:
             try:
-                response = await client.post(CHAT_COMPLETIONS_PATH, json=body)
+                response = await client.post(self._chat_path, json=body)
             except httpx.TimeoutException as exc:
                 raise ProviderError(
                     f"{self.provider_name} request timed out: {exc}",
@@ -127,7 +129,7 @@ class OpenAIProvider:
         body = request_body(request, stream=True)
         async with (
             self._client() as client,
-            client.stream("POST", CHAT_COMPLETIONS_PATH, json=body) as response,
+            client.stream("POST", self._chat_path, json=body) as response,
         ):
             if response.status_code >= 400:
                 await response.aread()

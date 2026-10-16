@@ -19,12 +19,14 @@ from wicklight.providers.fake import (
     ScriptedToolCall,
 )
 from wicklight.providers.openai import OpenAIProvider
+from wicklight.providers.openai_compatible import OpenAICompatibleProvider
 
 __all__ = [
     "AnthropicProvider",
     "FakeProvider",
     "FakeScript",
     "FakeScriptError",
+    "OpenAICompatibleProvider",
     "OpenAIProvider",
     "ScriptedResponse",
     "ScriptedToolCall",

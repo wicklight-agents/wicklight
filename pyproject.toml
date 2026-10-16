@@ -43,6 +43,7 @@ wicklight = "wicklight.cli:main"
 fake = "wicklight.providers.fake:FakeProvider"
 anthropic = "wicklight.providers.anthropic:AnthropicProvider"
 openai = "wicklight.providers.openai:OpenAIProvider"
+local = "wicklight.providers.openai_compatible:OpenAICompatibleProvider"
 
 [project.entry-points."wicklight.policies"]
 block_tools = "wicklight.policies.block_tools:BlockTools"
