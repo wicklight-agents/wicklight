@@ -41,6 +41,7 @@ wicklight = "wicklight.cli:main"
 
 [project.entry-points."wicklight.providers"]
 fake = "wicklight.providers.fake:FakeProvider"
+anthropic = "wicklight.providers.anthropic:AnthropicProvider"
 
 [project.entry-points."wicklight.policies"]
 block_tools = "wicklight.policies.block_tools:BlockTools"

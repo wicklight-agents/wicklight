@@ -13,6 +13,7 @@ from wicklight.testing.cassettes import (
     CassetteError,
     cassette_client,
     iter_cassettes,
+    replay_transport,
     scan_for_secrets,
     scrub_text,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "ScriptedApprover",
     "cassette_client",
     "iter_cassettes",
+    "replay_transport",
     "run_policy_conformance",
     "run_provider_conformance",
     "run_tool_conformance",

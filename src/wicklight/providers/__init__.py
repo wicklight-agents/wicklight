@@ -10,6 +10,7 @@ and demos; it is registered under the ``fake`` provider name.
 
 from __future__ import annotations
 
+from wicklight.providers.anthropic import AnthropicProvider
 from wicklight.providers.fake import (
     FakeProvider,
     FakeScript,
@@ -19,6 +20,7 @@ from wicklight.providers.fake import (
 )
 
 __all__ = [
+    "AnthropicProvider",
     "FakeProvider",
     "FakeScript",
     "FakeScriptError",
