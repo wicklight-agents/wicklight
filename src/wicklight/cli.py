@@ -27,6 +27,12 @@ from wicklight.agentfile import (
 from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import Capabilities, ProviderError, describe_providers
 from wicklight.core import TerminalApprover
+from wicklight.explain import (
+    ExplainError,
+    explain_step,
+    explanation_json,
+    render_explanation,
+)
 from wicklight.preflight import preflight
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.providers.credentials import required_keys
@@ -255,6 +261,33 @@ def replay(
         print_trace(console, trace)
         return
     run_stepper(ReplayStepper(trace.events), console, readline=input)
+
+
+@app.command()
+def explain(
+    trace_file: Annotated[
+        Path, typer.Argument(help="Path to the trace .jsonl or .jsonl.gz file.")
+    ],
+    step: Annotated[int, typer.Option("--step", help="The step to explain.")],
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Print a structured JSON explanation.")
+    ] = False,
+) -> None:
+    """Show what the model saw at a step, and what happened next."""
+    try:
+        trace = read_trace(trace_file)
+        explanation = explain_step(trace, step)
+    except TraceReadError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    except ExplainError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if as_json:
+        typer.echo(json.dumps(explanation_json(explanation), ensure_ascii=False))
+        return
+    render_explanation(Console(), explanation)
 
 
 providers_app = typer.Typer(
