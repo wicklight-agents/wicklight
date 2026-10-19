@@ -20,6 +20,7 @@ from wicklight.providers.fake import (
 )
 from wicklight.providers.openai import OpenAIProvider
 from wicklight.providers.openai_compatible import OpenAICompatibleProvider
+from wicklight.providers.replay import ReplayError, ReplayProvider
 
 __all__ = [
     "AnthropicProvider",
@@ -28,6 +29,8 @@ __all__ = [
     "FakeScriptError",
     "OpenAICompatibleProvider",
     "OpenAIProvider",
+    "ReplayError",
+    "ReplayProvider",
     "ScriptedResponse",
     "ScriptedToolCall",
 ]

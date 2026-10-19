@@ -52,13 +52,14 @@ step=planning`
 
 ### `model_called`
 A model was called through a provider. **Payload:** `model`, `provider`
-(optional), `request_ref` (blob hash, optional). *explain:* `called
-anthropic/claude-opus`
+(optional), `request_ref` (blob hash of the full request, so the run can be
+replayed; DTN-236). *explain:* `called anthropic/claude-opus`
 
 ### `model_responded`
 The model returned a response. **Payload:** `model`, `finish_reason`,
-`input_tokens`, `output_tokens`, `cost_usd`, `response_ref` (all optional).
-*explain:* `model responded (stop) using 1200 in / 80 out tokens`
+`input_tokens`, `output_tokens`, `cost_usd`, `response_ref` (blob hash of the
+full response, for replay; DTN-236). *explain:* `model responded (stop) using
+1200 in / 80 out tokens`
 
 ### `tool_proposed`
 The model proposed a tool call. **Payload:** `tool`, `call_id` (optional),

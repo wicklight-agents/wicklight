@@ -123,6 +123,10 @@ class TraceLog:
         self.run_id = run_id
         self._on_event = on_event
 
+    def store_blob(self, content: str) -> str:
+        """Store content in the run's blob store, returning its reference hash."""
+        return self._writer.store_blob(content)
+
     def emit(
         self,
         event_type: Callable[..., TraceEvent],
@@ -322,20 +326,23 @@ async def run_agent(
                 ContextBuiltPayload(message_count=len(messages), untrusted=untrusted),
             )
 
-            # 2. Route to a model and call it through the provider.
+            # 2. Route to a model and call it through the provider. The request
+            # is stored in the blob store so the run can be replayed or explained
+            # later (DTN-236) without calling a model.
             log.emit(
                 ModelRouted,
                 step,
                 f"routed to {model_id}",
                 ModelRoutedPayload(model=model_id),
             )
+            request = ModelRequest(model=model_id, messages=messages, tools=tool_defs)
+            request_ref = writer.store_blob(request.model_dump_json())
             log.emit(
                 ModelCalled,
                 step,
                 f"called {model_id}",
-                ModelCalledPayload(model=model_id),
+                ModelCalledPayload(model=model_id, request_ref=request_ref),
             )
-            request = ModelRequest(model=model_id, messages=messages, tools=tool_defs)
             try:
                 response = await _complete_with_retries(
                     provider,
@@ -363,11 +370,12 @@ async def run_agent(
                 break
 
             usage = _add_usage(usage, response.usage)
+            response_ref = writer.store_blob(response.model_dump_json())
             log.emit(
                 ModelResponded,
                 step,
                 _responded_explain(response),
-                _responded_payload(model_id, response),
+                _responded_payload(model_id, response, response_ref),
             )
 
             if usage.cost_usd is not None and usage.cost_usd > max_cost:
@@ -502,12 +510,19 @@ async def _handle_call(
     except Exception as exc:  # noqa: BLE001 - a tool bug is surfaced to the model, not raised
         result = ToolResult.failure(f"tool {call.name} raised: {exc}")
     duration_ms = (time.perf_counter() - start) * 1000
+    # Record the result so a replay can serve it from the trace instead of
+    # re-executing the tool (DTN-236).
+    result_ref = log.store_blob(result.model_dump_json())
     log.emit(
         ToolExecuted,
         step,
         _executed_explain(call.name, result, duration_ms),
         ToolExecutedPayload(
-            tool=call.name, call_id=call.id, ok=result.ok, duration_ms=duration_ms
+            tool=call.name,
+            call_id=call.id,
+            ok=result.ok,
+            duration_ms=duration_ms,
+            result_ref=result_ref,
         ),
     )
     return result
@@ -849,13 +864,16 @@ def _responded_explain(response: ModelResponse) -> str:
     )
 
 
-def _responded_payload(model_id: str, response: ModelResponse) -> ModelRespondedPayload:
+def _responded_payload(
+    model_id: str, response: ModelResponse, response_ref: str | None = None
+) -> ModelRespondedPayload:
     return ModelRespondedPayload(
         model=model_id,
         finish_reason=response.stop_reason.value,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
         cost_usd=response.usage.cost_usd,
+        response_ref=response_ref,
     )
 
 
