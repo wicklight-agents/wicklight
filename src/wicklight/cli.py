@@ -26,7 +26,13 @@ from wicklight.agentfile import (
 )
 from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import Capabilities, ProviderError, describe_providers
-from wicklight.core import TerminalApprover
+from wicklight.core import AutoApprove, TerminalApprover
+from wicklight.explain import (
+    ExplainError,
+    explain_step,
+    explanation_json,
+    render_explanation,
+)
 from wicklight.preflight import preflight
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.providers.credentials import required_keys
@@ -152,6 +158,13 @@ def run(
     trace: Annotated[
         bool, typer.Option("--trace", help="Stream each trace event live.")
     ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Stub every tool: show what would run after checks, execute nothing.",
+        ),
+    ] = False,
     runs_dir: Annotated[
         Path, typer.Option("--runs-dir", help="Directory for trace files.")
     ] = Path("runs"),
@@ -175,13 +188,17 @@ def run(
         else None
     )
     on_event = StepPrinter(console) if trace else None
+    # A dry run is a what-if: assume approvals are granted so the full path is
+    # shown; the automatic permission and policy checks still genuinely block.
+    approver = AutoApprove() if dry_run else TerminalApprover()
 
     try:
         result = agent.run(
             task,
             provider=provider,
             world=world_state,
-            approver=TerminalApprover(),
+            approver=approver,
+            dry_run=dry_run,
             runs_dir=runs_dir,
             on_event=on_event,
         )
@@ -255,6 +272,33 @@ def replay(
         print_trace(console, trace)
         return
     run_stepper(ReplayStepper(trace.events), console, readline=input)
+
+
+@app.command()
+def explain(
+    trace_file: Annotated[
+        Path, typer.Argument(help="Path to the trace .jsonl or .jsonl.gz file.")
+    ],
+    step: Annotated[int, typer.Option("--step", help="The step to explain.")],
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Print a structured JSON explanation.")
+    ] = False,
+) -> None:
+    """Show what the model saw at a step, and what happened next."""
+    try:
+        trace = read_trace(trace_file)
+        explanation = explain_step(trace, step)
+    except TraceReadError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    except ExplainError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if as_json:
+        typer.echo(json.dumps(explanation_json(explanation), ensure_ascii=False))
+        return
+    render_explanation(Console(), explanation)
 
 
 providers_app = typer.Typer(

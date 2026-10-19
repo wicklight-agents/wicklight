@@ -51,6 +51,8 @@ class _Payload(BaseModel):
 class RunStartedPayload(_Payload):
     agent: str
     agent_file: str | None = None
+    # True for a dry run (DTN-240): tools are stubbed and never executed.
+    dry_run: bool = False
 
 
 class ContextBuiltPayload(_Payload):
@@ -122,6 +124,9 @@ class ToolExecutedPayload(_Payload):
     ok: bool
     result_ref: str | None = None
     duration_ms: float | None = None
+    # True when the tool was stubbed in a dry run (DTN-240): it passed every
+    # check but was not actually executed.
+    dry_run: bool = False
 
 
 class LimitHitPayload(_Payload):
