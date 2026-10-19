@@ -74,11 +74,16 @@ class Agent:
         approver: Approver | None = None,
         checks: Sequence[ToolCheck] = (),
         policies: Sequence[ConfiguredPolicy] | None = None,
+        dry_run: bool = False,
         on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
     ) -> RunResult:
-        """Run the agent on ``task``, writing a trace and returning the result."""
+        """Run the agent on ``task``, writing a trace and returning the result.
+
+        With ``dry_run=True`` tools are stubbed: calls that pass every check are
+        recorded as "would have run" but never executed (DTN-240).
+        """
         run_id = run_id or f"run_{uuid4().hex[:12]}"
         model_provider = self._resolve_provider(provider)
         tool_map = self._resolve_tools(tools, world)
@@ -95,6 +100,7 @@ class Agent:
                 checks=checks,
                 policies=configured_policies,
                 approver=approver,
+                dry_run=dry_run,
                 agent_file=self._agent_file,
                 on_event=on_event,
             )
@@ -109,6 +115,7 @@ class Agent:
         approver: Approver | None = None,
         checks: Sequence[ToolCheck] = (),
         policies: Sequence[ConfiguredPolicy] | None = None,
+        dry_run: bool = False,
         on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
@@ -130,6 +137,7 @@ class Agent:
                     approver=approver,
                     checks=checks,
                     policies=policies,
+                    dry_run=dry_run,
                     on_event=on_event,
                     run_id=run_id,
                     runs_dir=runs_dir,

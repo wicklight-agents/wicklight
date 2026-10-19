@@ -101,6 +101,9 @@ _RISK_RANK = {
     ToolRisk.IRREVERSIBLE: 3,
 }
 
+#: Placeholder result handed to the model for a stubbed tool call in a dry run.
+DRY_RUN_RESULT = "(dry run: this tool was not executed)"
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -221,9 +224,16 @@ async def run_agent(
     approver: Approver | None = None,
     ctx: ToolContext | None = None,
     agent_file: AgentFile | None = None,
+    dry_run: bool = False,
+    dry_run_result: str = DRY_RUN_RESULT,
     on_event: Callable[[TraceEvent], None] | None = None,
 ) -> RunResult:
-    """Run an agent to completion, recording every step to the trace."""
+    """Run an agent to completion, recording every step to the trace.
+
+    In ``dry_run`` mode every tool is stubbed: a call that passes all checks is
+    recorded as "would have run" and handed ``dry_run_result`` instead of being
+    executed, so nothing leaves the machine except model calls.
+    """
     log = TraceLog(writer, run_id, on_event)
     agent_dir = _agent_dir(agent_file)
     # With no approver, the gate fails closed: approval-required calls are denied.
@@ -242,7 +252,7 @@ async def run_agent(
         RunStarted,
         0,
         f"run started for agent {config.name.value}",
-        RunStartedPayload(agent=config.name.value),
+        RunStartedPayload(agent=config.name.value, dry_run=dry_run),
     )
 
     # Preflight: fail before the first model call if the provider can't do what
@@ -430,6 +440,8 @@ async def run_agent(
                     log,
                     step,
                     agent_file,
+                    dry_run=dry_run,
+                    dry_run_result=dry_run_result,
                 )
                 if result.ok:
                     spent_usd += _call_amount(call.arguments)
@@ -469,6 +481,8 @@ async def _handle_call(
     log: TraceLog,
     step: int,
     agent_file: AgentFile | None,
+    dry_run: bool = False,
+    dry_run_result: str = "",
 ) -> ToolResult:
     # The permission check is fixed in the core and always runs first; plugin
     # checks cannot remove or reorder it.
@@ -502,6 +516,25 @@ async def _handle_call(
     approval = await _check_approval(call, tool, config, approver, log, step)
     if not approval.allowed:
         return ToolResult.failure(f"blocked: {approval.reason}")
+
+    # Dry run: the call passed every check, but we don't execute it. Record that
+    # it "would have run" and hand back a placeholder so the model continues.
+    if dry_run:
+        result = ToolResult.success(dry_run_result)
+        result_ref = log.store_blob(result.model_dump_json())
+        log.emit(
+            ToolExecuted,
+            step,
+            f"would have run {call.name} (dry run)",
+            ToolExecutedPayload(
+                tool=call.name,
+                call_id=call.id,
+                ok=True,
+                result_ref=result_ref,
+                dry_run=True,
+            ),
+        )
+        return result
 
     # Execute the tool and record the result.
     start = time.perf_counter()

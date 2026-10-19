@@ -109,6 +109,18 @@ untrusted.
   invalid request, …), or exhausted retries, stops the run with a terminal
   `error` event and status `error`, carrying a suggested fix where there is one.
 
+## Dry run
+
+With `dry_run=True` (`wicklight run --dry-run`, DTN-240) every tool is stubbed:
+a call still goes through permission, policy, and approval checks, but once it
+passes, instead of executing it is recorded as `would have run <tool> (dry run)`
+and handed a placeholder result so the model keeps going. Nothing leaves the
+machine except model calls, and the trace is marked `dry_run` on `run_started`.
+Blocked calls are still blocked and shown, so a dry run answers "what would this
+agent do, and what would the policies stop?" The CLI assumes approvals are
+granted in a dry run (it is a what-if), while the automatic checks block for
+real.
+
 ## The end
 
 Whatever the exit — completed, limit, or error — the loop emits a single

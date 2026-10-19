@@ -55,6 +55,10 @@ A model was called through a provider. **Payload:** `model`, `provider`
 (optional), `request_ref` (blob hash of the full request, so the run can be
 replayed; DTN-236). *explain:* `called anthropic/claude-opus`
 
+> `run_started` carries `dry_run` (DTN-240): true when tools are stubbed and
+> never executed. `tool_executed` carries `dry_run` too — true for a call that
+> passed every check but was recorded as "would have run" rather than run.
+
 ### `model_responded`
 The model returned a response. **Payload:** `model`, `finish_reason`,
 `input_tokens`, `output_tokens`, `cost_usd`, `response_ref` (blob hash of the

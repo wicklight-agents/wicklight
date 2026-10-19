@@ -21,6 +21,7 @@ from wicklight.core.approval import (
     TerminalApprover,
 )
 from wicklight.core.loop import (
+    DRY_RUN_RESULT,
     CheckOutcome,
     ConfiguredPolicy,
     ProposedCall,
@@ -31,6 +32,7 @@ from wicklight.core.loop import (
 )
 
 __all__ = [
+    "DRY_RUN_RESULT",
     "REQUIRE_APPROVER",
     "ApprovalDecision",
     "ApprovalError",
