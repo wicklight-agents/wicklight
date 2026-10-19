@@ -49,5 +49,28 @@ rather than returning a stale response — so a replay either reproduces the run
 faithfully or tells you exactly where it couldn't. Re-running a FakeProvider
 trace through the loop reproduces an identical event sequence.
 
-Replaying a run against a *changed* agent file (the "would my fix have caught
-it?" workflow) builds on this and arrives in DTN-238.
+## Counterfactual replay — `replay --agent`
+
+The "would my fix have caught it?" workflow (DTN-238):
+
+```bash
+uv run wicklight replay runs/<run_id>.jsonl --agent tightened_agent.md
+```
+
+It re-checks each tool call the model made in the original run against a changed
+agent file — new policies, tighter permissions, new approval rules — using the
+recorded decisions, with no model call and no tool execution. It reports the
+first step whose outcome changed and stops there, because every later model
+decision in the original run depended on the old result:
+
+```
+step 2: send_email was allowed, now blocked by email_only_to
+  reason: send_email to attacker@evil.com is not allowed; …
+stopped here: later model decisions depended on the old result.
+```
+
+The re-check reuses the same primitives the core loop uses — the effective
+config's permission level, the configured policies' `check`, and the approval
+requirement — so a counterfactual outcome matches what a real run under the new
+file would decide at the check stage. The replay is written as its own trace,
+marked `counterfactual` on `run_started`.

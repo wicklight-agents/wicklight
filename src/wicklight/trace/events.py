@@ -53,6 +53,9 @@ class RunStartedPayload(_Payload):
     agent_file: str | None = None
     # True for a dry run (DTN-240): tools are stubbed and never executed.
     dry_run: bool = False
+    # True for a counterfactual replay against a changed agent file (DTN-238):
+    # recorded model decisions re-checked under new rules, nothing executed.
+    counterfactual: bool = False
 
 
 class ContextBuiltPayload(_Payload):

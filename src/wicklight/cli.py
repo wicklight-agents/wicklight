@@ -27,6 +27,7 @@ from wicklight.agentfile import (
 from wicklight.agentfile.config import EffectiveConfig
 from wicklight.contracts import Capabilities, ProviderError, describe_providers
 from wicklight.core import AutoApprove, TerminalApprover
+from wicklight.counterfactual import counterfactual_replay
 from wicklight.explain import (
     ExplainError,
     explain_step,
@@ -37,7 +38,7 @@ from wicklight.preflight import preflight
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.providers.credentials import required_keys
 from wicklight.tools import MockWorld
-from wicklight.trace import TraceReadError, dump_trace_event, read_trace
+from wicklight.trace import Trace, TraceReadError, dump_trace_event, read_trace
 from wicklight.trace.console import StepPrinter, filter_events, print_trace
 from wicklight.trace.stepper import ReplayStepper, run_stepper
 
@@ -259,8 +260,19 @@ def replay(
         bool,
         typer.Option("--all", help="Print the whole run instead of stepping (for CI)."),
     ] = False,
+    agent: Annotated[
+        Path | None,
+        typer.Option(
+            "--agent",
+            help="Re-check the run's decisions against this changed agent file.",
+        ),
+    ] = None,
 ) -> None:
-    """Step through a past run, event by event. No model calls, no side effects."""
+    """Step through a past run, event by event. No model calls, no side effects.
+
+    With ``--agent`` it instead replays the run's recorded decisions against a
+    changed agent file and reports the first outcome that differs.
+    """
     try:
         trace = read_trace(trace_file)
     except TraceReadError as exc:
@@ -268,10 +280,31 @@ def replay(
         raise typer.Exit(code=1) from exc
 
     console = Console()
+    if agent is not None:
+        _counterfactual(console, trace, agent)
+        return
     if all_events:
         print_trace(console, trace)
         return
     run_stepper(ReplayStepper(trace.events), console, readline=input)
+
+
+def _counterfactual(console: Console, trace: Trace, agent_path: Path) -> None:
+    result = counterfactual_replay(trace, agent_path)
+    if result.divergence is None:
+        console.print(
+            f"No outcomes changed across {result.evaluated_steps} tool call(s) "
+            f"under {agent_path.name}."
+        )
+    else:
+        d = result.divergence
+        console.print(d.describe(), style="bold red")
+        if d.counterfactual.reason:
+            console.print(f"  reason: {d.counterfactual.reason}")
+        console.print(
+            "[dim]stopped here: later model decisions depended on the old result.[/]"
+        )
+    console.print(f"[dim]counterfactual trace: {result.trace_path}[/]")
 
 
 @app.command()
