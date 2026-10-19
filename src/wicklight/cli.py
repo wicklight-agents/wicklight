@@ -33,6 +33,7 @@ from wicklight.providers.credentials import required_keys
 from wicklight.tools import MockWorld
 from wicklight.trace import TraceReadError, dump_trace_event, read_trace
 from wicklight.trace.console import StepPrinter, filter_events, print_trace
+from wicklight.trace.stepper import ReplayStepper, run_stepper
 
 app = typer.Typer(
     name="wicklight",
@@ -230,6 +231,30 @@ def trace_show(
         return
 
     print_trace(Console(), trace, step=step, event_type=event_type)
+
+
+@app.command()
+def replay(
+    trace_file: Annotated[
+        Path, typer.Argument(help="Path to the trace .jsonl or .jsonl.gz file.")
+    ],
+    all_events: Annotated[
+        bool,
+        typer.Option("--all", help="Print the whole run instead of stepping (for CI)."),
+    ] = False,
+) -> None:
+    """Step through a past run, event by event. No model calls, no side effects."""
+    try:
+        trace = read_trace(trace_file)
+    except TraceReadError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    console = Console()
+    if all_events:
+        print_trace(console, trace)
+        return
+    run_stepper(ReplayStepper(trace.events), console, readline=input)
 
 
 providers_app = typer.Typer(
