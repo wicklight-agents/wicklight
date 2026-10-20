@@ -24,7 +24,7 @@ from wicklight.contracts import (
     ProviderRegistry,
     classify_contract_version,
 )
-from wicklight.routing import unreachable_routes
+from wicklight.routing import allowed_sensitive_models, unreachable_routes
 
 #: Rough characters-per-token ratio for the context-size estimate.
 _CHARS_PER_TOKEN = 4
@@ -173,6 +173,23 @@ def routing_issues(
             PreflightIssue(
                 f"routing: route {index + 1} is unreachable — route "
                 f"{shadowed_by + 1} is broader and always matches first",
+                fatal=False,
+            )
+        )
+
+    # If the agent can produce sensitive data but declares no model allowed for
+    # it, any run that touches that data will stop (DTN-245). Warn up front.
+    sensitive_tools = [
+        name for name, tool in config.tools.items() if tool.sensitive.value
+    ]
+    route_pairs = [(route.when, route.use) for route in models.routes.value]
+    if sensitive_tools and not allowed_sensitive_models(route_pairs):
+        joined = ", ".join(sensitive_tools)
+        issues.append(
+            PreflightIssue(
+                f"routing: {joined} can produce sensitive data, but no route "
+                f"allows a model for sensitive data — such a run will stop. Add "
+                f"a 'when: {{ data: sensitive }}' route.",
                 fatal=False,
             )
         )

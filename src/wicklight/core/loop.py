@@ -53,7 +53,12 @@ from wicklight.core.approval import (
     Approver,
 )
 from wicklight.preflight import run_capability_issues
-from wicklight.routing import RouteContext, StepType, choose_route
+from wicklight.routing import (
+    RouteContext,
+    StepType,
+    allowed_sensitive_models,
+    choose_route,
+)
 from wicklight.trace import (
     ApprovalRequested,
     ApprovalRequestedPayload,
@@ -247,6 +252,7 @@ async def run_agent(
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
     default_model = config.models.default.value
     route_pairs = [(r.when, r.use) for r in config.models.routes.value]
+    sensitive_allowed = allowed_sensitive_models(route_pairs)
     providers = providers or {}
     max_steps = config.limits.max_steps.value
     max_cost = config.limits.max_cost.value
@@ -293,6 +299,9 @@ async def run_agent(
     usage = Usage()
     # Running total of money spent by executed tool calls, for spend policies.
     spent_usd = 0.0
+    # Latches True once a sensitive tool result enters context; never resets, so
+    # truncating the result out of context later does not lift the restriction.
+    run_sensitive = False
     output = ""
     status = RunStatus.COMPLETED
     step = 0
@@ -351,9 +360,28 @@ async def run_agent(
                 step=StepType.PLANNING if step == 1 else StepType.EXECUTION,
                 context_tokens=_estimate_tokens(messages),
                 cost_so_far=usage.cost_usd or 0.0,
-                sensitive=False,  # sensitivity routing arrives in DTN-245
+                sensitive=run_sensitive,
             )
-            choice = choose_route(default_model, route_pairs, route_ctx)
+            # Once the run is sensitive, only models allowed for sensitive data
+            # may be called — nothing else, no matter what the routes say.
+            allowed = sensitive_allowed if run_sensitive else None
+            choice = choose_route(
+                default_model, route_pairs, route_ctx, allowed=allowed
+            )
+            if choice.model is None:
+                detail = ", ".join(choice.excluded) or "none configured"
+                message = (
+                    "run is sensitive but no model is allowed for sensitive data "
+                    f"(excluded: {detail}); stopping rather than leak"
+                )
+                log.emit(
+                    ErrorEvent,
+                    step,
+                    f"error: {message}",
+                    ErrorPayload(message=message, where="sensitivity"),
+                )
+                status = RunStatus.ERROR
+                break
             model_id = choice.model
             route_source = (
                 _route_source(agent_file, choice.route_index)
@@ -363,6 +391,10 @@ async def run_agent(
             routed_explain = f"routed to {model_id} by {choice.matched_rule}"
             if route_source:
                 routed_explain += f" ({route_source})"
+            if choice.excluded:
+                routed_explain += (
+                    f" [excluded for sensitivity: {', '.join(choice.excluded)}]"
+                )
             log.emit(
                 ModelRouted,
                 step,
@@ -371,6 +403,7 @@ async def run_agent(
                     model=model_id,
                     matched_rule=choice.matched_rule,
                     source=route_source,
+                    excluded=list(choice.excluded),
                 ),
             )
 
@@ -488,6 +521,8 @@ async def run_agent(
                 )
                 if result.ok:
                     spent_usd += _call_amount(call.arguments)
+                    if result.sensitive or config.is_sensitive_tool(call.name):
+                        run_sensitive = True
                 history.append(_tool_message(call, result))
     except (KeyboardInterrupt, asyncio.CancelledError):
         # A human stopped the run. Record it and exit cleanly so the trace still
@@ -589,16 +624,21 @@ async def _handle_call(
     # Record the result so a replay can serve it from the trace instead of
     # re-executing the tool (DTN-236).
     result_ref = log.store_blob(result.model_dump_json())
+    sensitive = result.ok and (result.sensitive or config.is_sensitive_tool(call.name))
+    explain = _executed_explain(call.name, result, duration_ms)
+    if sensitive:
+        explain += " (sensitive: run now restricted to allowed models)"
     log.emit(
         ToolExecuted,
         step,
-        _executed_explain(call.name, result, duration_ms),
+        explain,
         ToolExecutedPayload(
             tool=call.name,
             call_id=call.id,
             ok=result.ok,
             duration_ms=duration_ms,
             result_ref=result_ref,
+            sensitive=sensitive,
         ),
     )
     return result
