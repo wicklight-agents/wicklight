@@ -138,12 +138,18 @@ def route_matches(when: dict[str, Any], ctx: RouteContext) -> bool:
 
 @dataclass(frozen=True)
 class RouteChoice:
-    """The outcome of routing a model call."""
+    """The outcome of routing a model call.
 
-    model: str
+    ``model`` is ``None`` only in a sensitive run where no allowed model matched
+    — the caller must then stop rather than leak. ``excluded`` lists models that
+    matched but were skipped because they aren't allowed for sensitive data.
+    """
+
+    model: str | None
     #: 0-based index of the matching route, or None when the default was used.
     route_index: int | None
     when: dict[str, Any] | None = None
+    excluded: tuple[str, ...] = ()
 
     @property
     def matched_rule(self) -> str:
@@ -154,16 +160,42 @@ class RouteChoice:
 
 
 def choose_route(
-    default: str, routes: list[tuple[dict[str, Any], str]], ctx: RouteContext
+    default: str,
+    routes: list[tuple[dict[str, Any], str]],
+    ctx: RouteContext,
+    *,
+    allowed: set[str] | None = None,
 ) -> RouteChoice:
     """First-match routing: the first route whose condition holds, else default.
 
-    ``routes`` is a list of ``(when, model)`` pairs in agent-file order.
+    ``routes`` is a list of ``(when, model)`` pairs in agent-file order. When
+    ``allowed`` is given (a sensitive run), only models in that set may be
+    chosen: a matching route to a disallowed model is skipped and recorded in
+    ``excluded``; if nothing allowed matches, ``model`` is ``None``.
     """
+    excluded: list[str] = []
     for index, (when, model) in enumerate(routes):
         if route_matches(when, ctx):
-            return RouteChoice(model=model, route_index=index, when=when)
-    return RouteChoice(model=default, route_index=None)
+            if allowed is None or model in allowed:
+                return RouteChoice(
+                    model=model, route_index=index, when=when, excluded=tuple(excluded)
+                )
+            excluded.append(model)
+    if allowed is None or default in allowed:
+        return RouteChoice(model=default, route_index=None, excluded=tuple(excluded))
+    excluded.append(default)
+    return RouteChoice(model=None, route_index=None, excluded=tuple(excluded))
+
+
+def allowed_sensitive_models(routes: list[tuple[dict[str, Any], str]]) -> set[str]:
+    """Models allowed for sensitive data: those targeted by a ``data: sensitive``
+    route. If an agent handles sensitive data but declares none, no model may be
+    called once the run is sensitive — it must stop rather than leak."""
+    return {
+        model
+        for when, model in routes
+        if when.get(ConditionKey.DATA.value) == "sensitive"
+    }
 
 
 def unreachable_routes(whens: list[dict[str, Any]]) -> list[tuple[int, int]]:

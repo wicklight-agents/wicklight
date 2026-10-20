@@ -73,6 +73,9 @@ class ModelRoutedPayload(_Payload):
     matched_rule: str | None = None
     # The agent-file line of the matching route, e.g. "agent.md line 6" (DTN-243).
     source: str | None = None
+    # Models that matched but were excluded because the run is sensitive and they
+    # aren't allowed for sensitive data (DTN-245).
+    excluded: list[str] = []
 
 
 class ModelCalledPayload(_Payload):
@@ -132,6 +135,9 @@ class ToolExecutedPayload(_Payload):
     # True when the tool was stubbed in a dry run (DTN-240): it passed every
     # check but was not actually executed.
     dry_run: bool = False
+    # True when this result is sensitive and latched the run into sensitive mode
+    # (DTN-245), restricting the rest of the run to sensitivity-allowed models.
+    sensitive: bool = False
 
 
 class LimitHitPayload(_Payload):

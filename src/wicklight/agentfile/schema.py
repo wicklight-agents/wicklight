@@ -44,6 +44,9 @@ class ToolSpec(BaseModel):
     # every waiver and the trace records it.
     waive_approval: bool = False
     reason: str | None = None
+    # Marks the tool's output as sensitive: once it enters context, the run is
+    # restricted to sensitivity-allowed models for the rest of the run (DTN-245).
+    sensitive: bool = False
 
     @model_validator(mode="after")
     def _waiver_needs_reason(self) -> ToolSpec:

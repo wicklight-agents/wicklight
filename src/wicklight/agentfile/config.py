@@ -68,6 +68,7 @@ class EffectiveTool:
     approval_required: Sourced[bool]
     waiver: Sourced[bool]
     waiver_reason: Sourced[str | None]
+    sensitive: Sourced[bool]
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,11 @@ class EffectiveConfig:
         """The written reason for a tool's waiver, if it has one."""
         tool = self.tools.get(name)
         return tool.waiver_reason.value if tool is not None else None
+
+    def is_sensitive_tool(self, name: str) -> bool:
+        """Whether the agent file marks a tool's output as sensitive (DTN-245)."""
+        tool = self.tools.get(name)
+        return tool.sensitive.value if tool is not None else False
 
 
 def build_effective_config(
@@ -176,6 +182,9 @@ def _effective_tool(spec: ToolSpec, raw: Mapping[str, Any]) -> EffectiveTool:
         approval_required=approval,
         waiver=waiver,
         waiver_reason=waiver_reason,
+        sensitive=Sourced(
+            spec.sensitive, Source.FILE if spec.sensitive else Source.DEFAULT
+        ),
     )
 
 

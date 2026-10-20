@@ -46,8 +46,36 @@ model_routed  routed to anthropic/claude-opus by rule 1 (step=planning) (agent.m
 referenced model resolves to an installed provider, and warns when a route is
 unreachable — shadowed by an earlier, broader rule that always matches first.
 
-## Fallbacks and sensitivity
+## Enforced sensitivity routing
 
-The `fallback` list and enforced sensitivity routing (a run that touches
-sensitive data may only call sensitivity-allowed models) arrive in DTN-244 and
-DTN-245.
+"Never send this data to a hosted model" is a rule the harness enforces
+(DTN-245). A tool whose output is sensitive is marked in the agent file:
+
+```yaml
+tools:
+  read_file: { level: read, sensitive: true }
+```
+
+Once a sensitive tool result enters the context, the run **latches** into
+sensitive mode for the rest of the run — even if that result is later truncated
+out of context. From then on, only models **allowed for sensitive data** may be
+called: the models targeted by a `when: { data: sensitive }` route.
+
+Enforcement runs inside the router, not just as route preference:
+
+- A matching route to a model that isn't sensitivity-allowed is **excluded** and
+  recorded on the `model_routed` event, not followed.
+- If no allowed model is available, the run **stops with an error** rather than
+  leak — it never falls through to a hosted model.
+
+`wicklight check` warns up front when an agent declares a sensitive tool but no
+`data: sensitive` route, because such a run would stop as soon as it touched
+that data.
+
+(Tool output can also be marked sensitive at runtime via `ToolResult.sensitive`;
+either source latches the run.)
+
+## Fallbacks
+
+The `fallback` list — trying other models when the chosen one fails, while
+honoring the sensitivity gate above — arrives in DTN-244.
