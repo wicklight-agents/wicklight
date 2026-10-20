@@ -59,10 +59,20 @@ class Route(BaseModel):
 
     model_config = _STRICT
 
-    # Route-condition semantics (step, context_tokens, data, ...) are enforced
-    # by the routing milestone; here it is a free-form mapping.
     when: dict[str, Any]
     use: str
+
+    @model_validator(mode="after")
+    def _validate_when(self) -> Route:
+        # Keep the import local: routing imports nothing from this module, but
+        # this avoids any import-order surprises.
+        from wicklight.routing import ConditionError, validate_when
+
+        try:
+            validate_when(self.when)
+        except ConditionError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
 
 
 class ModelsConfig(BaseModel):

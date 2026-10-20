@@ -25,7 +25,16 @@ def render_effective_config(config: EffectiveConfig) -> str:
         "",
         "models:",
         f"  default: {models.default.value} {_src(models.default)}",
-        f"  routes: {len(models.routes.value)} {_src(models.routes)}",
+    ]
+    # Routes are printed in evaluation order (first match wins).
+    if models.routes.value:
+        lines.append("  routes (first match wins):")
+        for index, route in enumerate(models.routes.value):
+            when = ", ".join(f"{key}={value}" for key, value in route.when.items())
+            lines.append(f"    {index + 1}. when {when} → {route.use}")
+    else:
+        lines.append(f"  routes: 0 {_src(models.routes)}")
+    lines += [
         f"  fallback: {fallback} {_src(models.fallback)}",
         "",
         "limits:",

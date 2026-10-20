@@ -34,7 +34,7 @@ from wicklight.explain import (
     explanation_json,
     render_explanation,
 )
-from wicklight.preflight import preflight
+from wicklight.preflight import PreflightIssue, preflight, routing_issues
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.providers.credentials import required_keys
 from wicklight.tools import MockWorld
@@ -101,17 +101,17 @@ def check(
     typer.echo("")
     typer.echo(_render_api_keys(effective))
     typer.echo("")
-    if _report_capabilities(effective, agent):
+
+    fatal = _report_issues("capabilities", preflight(effective, agent))
+    typer.echo("")
+    fatal |= _report_issues("routing", routing_issues(effective))
+    if fatal:
         raise typer.Exit(code=1)
 
 
-def _report_capabilities(config: EffectiveConfig, agent: object) -> bool:
-    """Print the capability preflight; return True if a fatal issue was found."""
-    from wicklight.agentfile import AgentFile
-
-    agent_file = agent if isinstance(agent, AgentFile) else None
-    issues = preflight(config, agent_file)
-    typer.echo("capabilities:")
+def _report_issues(heading: str, issues: list[PreflightIssue]) -> bool:
+    """Print a preflight section; return True if a fatal issue was found."""
+    typer.echo(f"{heading}:")
     if not issues:
         typer.echo("  ok")
         return False
