@@ -53,6 +53,7 @@ from wicklight.core.approval import (
     Approver,
 )
 from wicklight.preflight import run_capability_issues
+from wicklight.routing import RouteContext, StepType, choose_route
 from wicklight.trace import (
     ApprovalRequested,
     ApprovalRequestedPayload,
@@ -222,6 +223,7 @@ async def run_agent(
     checks: Sequence[ToolCheck] = (),
     policies: Sequence[ConfiguredPolicy] = (),
     approver: Approver | None = None,
+    providers: Mapping[str, Provider] | None = None,
     ctx: ToolContext | None = None,
     agent_file: AgentFile | None = None,
     dry_run: bool = False,
@@ -233,13 +235,19 @@ async def run_agent(
     In ``dry_run`` mode every tool is stubbed: a call that passes all checks is
     recorded as "would have run" and handed ``dry_run_result`` instead of being
     executed, so nothing leaves the machine except model calls.
+
+    When the agent file declares ``routes``, the model for each step is chosen by
+    first-match routing (DTN-243). ``providers`` maps a routed ``provider/model``
+    id to its provider; ``provider`` is used for the default model.
     """
     log = TraceLog(writer, run_id, on_event)
     agent_dir = _agent_dir(agent_file)
     # With no approver, the gate fails closed: approval-required calls are denied.
     approver = approver if approver is not None else REQUIRE_APPROVER
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
-    model_id = config.models.default.value
+    default_model = config.models.default.value
+    route_pairs = [(r.when, r.use) for r in config.models.routes.value]
+    providers = providers or {}
     max_steps = config.limits.max_steps.value
     max_cost = config.limits.max_cost.value
     timeout = config.limits.timeout.value
@@ -336,15 +344,50 @@ async def run_agent(
                 ContextBuiltPayload(message_count=len(messages), untrusted=untrusted),
             )
 
-            # 2. Route to a model and call it through the provider. The request
-            # is stored in the blob store so the run can be replayed or explained
+            # 2. Route to a model (first match wins) and call it. The request is
+            # stored in the blob store so the run can be replayed or explained
             # later (DTN-236) without calling a model.
+            route_ctx = RouteContext(
+                step=StepType.PLANNING if step == 1 else StepType.EXECUTION,
+                context_tokens=_estimate_tokens(messages),
+                cost_so_far=usage.cost_usd or 0.0,
+                sensitive=False,  # sensitivity routing arrives in DTN-245
+            )
+            choice = choose_route(default_model, route_pairs, route_ctx)
+            model_id = choice.model
+            route_source = (
+                _route_source(agent_file, choice.route_index)
+                if choice.route_index is not None
+                else None
+            )
+            routed_explain = f"routed to {model_id} by {choice.matched_rule}"
+            if route_source:
+                routed_explain += f" ({route_source})"
             log.emit(
                 ModelRouted,
                 step,
-                f"routed to {model_id}",
-                ModelRoutedPayload(model=model_id),
+                routed_explain,
+                ModelRoutedPayload(
+                    model=model_id,
+                    matched_rule=choice.matched_rule,
+                    source=route_source,
+                ),
             )
+
+            try:
+                step_provider = _provider_for(
+                    model_id, default_model, provider, providers
+                )
+            except ProviderError as exc:
+                log.emit(
+                    ErrorEvent,
+                    step,
+                    f"error: {exc}",
+                    ErrorPayload(message=str(exc), where="routing"),
+                )
+                status = RunStatus.ERROR
+                break
+
             request = ModelRequest(model=model_id, messages=messages, tools=tool_defs)
             request_ref = writer.store_blob(request.model_dump_json())
             log.emit(
@@ -355,7 +398,7 @@ async def run_agent(
             )
             try:
                 response = await _complete_with_retries(
-                    provider,
+                    step_provider,
                     request,
                     max_retries=max_retries,
                     backoff=retry_backoff,
@@ -636,6 +679,41 @@ def _agent_dir(agent_file: AgentFile | None) -> Path | None:
     if agent_file is None or agent_file.path is None:
         return None
     return agent_file.path.parent
+
+
+#: Rough characters-per-token ratio for the routing context-size estimate.
+_CHARS_PER_TOKEN = 4
+
+
+def _estimate_tokens(messages: list[Message]) -> int:
+    """A rough estimate of the context size, for context_tokens routing."""
+    return sum(len(message.content) for message in messages) // _CHARS_PER_TOKEN
+
+
+def _route_source(agent_file: AgentFile | None, route_index: int) -> str | None:
+    if agent_file is None:
+        return None
+    line = agent_file.line_of("models", "routes", route_index)
+    if line is None:
+        return None
+    filename = agent_file.path.name if agent_file.path else "agent.md"
+    return f"{filename} line {line}"
+
+
+def _provider_for(
+    model_id: str,
+    default_model: str,
+    default_provider: Provider,
+    providers: Mapping[str, Provider],
+) -> Provider:
+    """The provider to call for a (possibly routed) model id."""
+    if model_id in providers:
+        return providers[model_id]
+    if model_id == default_model:
+        return default_provider
+    raise ProviderError(
+        f"no provider available for routed model {model_id!r}; it is not installed"
+    )
 
 
 #: Argument names a monetary amount may appear under, for per-run spend tracking.

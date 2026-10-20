@@ -46,9 +46,10 @@ and the model's own turns; DTN-219), `content_ref` (hash of the full context in
 the blob store, optional). *explain:* `built context with 4 messages (2 untrusted)`
 
 ### `model_routed`
-The router chose a model and logged which rule matched. **Payload:** `model`,
-`matched_rule` (optional). *explain:* `routed to anthropic/claude-opus by rule
-step=planning`
+The router chose a model and logged which rule matched (DTN-243). **Payload:**
+`model`, `matched_rule` (e.g. `rule 1 (step=planning)` or `default`), `source`
+(the agent-file line of the matching route, optional). *explain:* `routed to
+anthropic/claude-opus by rule 1 (step=planning) (agent.md line 6)`
 
 ### `model_called`
 A model was called through a provider. **Payload:** `model`, `provider`

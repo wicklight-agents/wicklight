@@ -25,6 +25,7 @@ from wicklight.contracts import (
     PolicyError,
     PolicyRegistry,
     Provider,
+    ProviderError,
     ProviderRegistry,
     Tool,
     ToolRegistry,
@@ -69,6 +70,7 @@ class Agent:
         task: str,
         *,
         provider: Provider | None = None,
+        providers: Mapping[str, Provider] | None = None,
         tools: Mapping[str, Tool] | None = None,
         world: MockWorld | None = None,
         approver: Approver | None = None,
@@ -82,10 +84,11 @@ class Agent:
         """Run the agent on ``task``, writing a trace and returning the result.
 
         With ``dry_run=True`` tools are stubbed: calls that pass every check are
-        recorded as "would have run" but never executed (DTN-240).
+        recorded as "would have run" but never executed (DTN-240). For a routed
+        agent, ``providers`` maps each routed model id to its provider.
         """
         run_id = run_id or f"run_{uuid4().hex[:12]}"
-        model_provider = self._resolve_provider(provider)
+        provider_map, default_provider = self._resolve_providers(provider, providers)
         tool_map = self._resolve_tools(tools, world)
         configured_policies = self._resolve_policies(policies)
         with TraceWriter(run_id, root=runs_dir, redactor=trace_redactor()) as writer:
@@ -94,7 +97,8 @@ class Agent:
                 instructions=self._agent_file.body,
                 task=task,
                 config=self._config,
-                provider=model_provider,
+                provider=default_provider,
+                providers=provider_map,
                 tools=tool_map,
                 writer=writer,
                 checks=checks,
@@ -110,6 +114,7 @@ class Agent:
         task: str,
         *,
         provider: Provider | None = None,
+        providers: Mapping[str, Provider] | None = None,
         tools: Mapping[str, Tool] | None = None,
         world: MockWorld | None = None,
         approver: Approver | None = None,
@@ -132,6 +137,7 @@ class Agent:
                 self.arun(
                     task,
                     provider=provider,
+                    providers=providers,
                     tools=tools,
                     world=world,
                     approver=approver,
@@ -151,12 +157,43 @@ class Agent:
         with ThreadPoolExecutor(max_workers=1) as pool:
             return pool.submit(_call).result()
 
-    def _resolve_provider(self, provider: Provider | None) -> Provider:
-        if provider is not None:
-            return provider
-        model_id = self._config.models.default.value
-        resolved, _ = ProviderRegistry.discover().resolve(model_id)
-        return resolved
+    def _resolve_providers(
+        self,
+        provider: Provider | None,
+        providers: Mapping[str, Provider] | None,
+    ) -> tuple[dict[str, Provider], Provider]:
+        """Build the model→provider map and the default provider.
+
+        Covers the default model plus every routed and fallback model. Injected
+        ``providers`` win; an injected single ``provider`` stands in for the
+        default; anything else is resolved from the installed plugins.
+        """
+        models = self._config.models
+        default_model = models.default.value
+        resolved: dict[str, Provider] = dict(providers or {})
+
+        referenced = [default_model]
+        referenced += [route.use for route in models.routes.value]
+        referenced += list(models.fallback.value)
+
+        registry: ProviderRegistry | None = None
+        for model_id in referenced:
+            if model_id in resolved:
+                continue
+            if provider is not None and model_id == default_model:
+                resolved[model_id] = provider
+                continue
+            registry = registry or ProviderRegistry.discover()
+            try:
+                resolved[model_id], _ = registry.resolve(model_id)
+            except ProviderError:
+                # A route/fallback target that isn't installed is left out: the
+                # loop raises a routing error only if that model is actually
+                # chosen (an unused route shouldn't abort the run). The default
+                # must resolve, so let its failure propagate.
+                if model_id == default_model:
+                    raise
+        return resolved, resolved[default_model]
 
     def _resolve_tools(
         self, tools: Mapping[str, Tool] | None, world: MockWorld | None
