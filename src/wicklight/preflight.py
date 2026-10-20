@@ -24,6 +24,7 @@ from wicklight.contracts import (
     ProviderRegistry,
     classify_contract_version,
 )
+from wicklight.routing import unreachable_routes
 
 #: Rough characters-per-token ratio for the context-size estimate.
 _CHARS_PER_TOKEN = 4
@@ -141,4 +142,38 @@ def preflight(
     if status == "deprecated":
         issues.append(PreflightIssue(f"{source}: {detail}", fatal=False))
     issues.extend(run_capability_issues(config, provider.capabilities, agent_file))
+    return issues
+
+
+def routing_issues(
+    config: EffectiveConfig,
+    *,
+    registry: ProviderRegistry | None = None,
+) -> list[PreflightIssue]:
+    """Validate routing: every referenced model resolves, and flag dead routes."""
+    registry = registry if registry is not None else ProviderRegistry.discover()
+    models = config.models
+    issues: list[PreflightIssue] = []
+
+    # Every route target and fallback must resolve to an installed provider.
+    # (The default is already checked by preflight's resolve.)
+    referenced = [route.use for route in models.routes.value] + list(
+        models.fallback.value
+    )
+    for model_id in referenced:
+        try:
+            registry.resolve(model_id)
+        except ProviderError as exc:
+            issues.append(PreflightIssue(f"routing: {model_id}: {exc}"))
+
+    # Routes shadowed by an earlier, broader rule can never fire.
+    whens = [route.when for route in models.routes.value]
+    for index, shadowed_by in unreachable_routes(whens):
+        issues.append(
+            PreflightIssue(
+                f"routing: route {index + 1} is unreachable — route "
+                f"{shadowed_by + 1} is broader and always matches first",
+                fatal=False,
+            )
+        )
     return issues

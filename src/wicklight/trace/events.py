@@ -71,6 +71,8 @@ class ContextBuiltPayload(_Payload):
 class ModelRoutedPayload(_Payload):
     model: str
     matched_rule: str | None = None
+    # The agent-file line of the matching route, e.g. "agent.md line 6" (DTN-243).
+    source: str | None = None
 
 
 class ModelCalledPayload(_Payload):
