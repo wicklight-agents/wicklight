@@ -28,6 +28,8 @@ dependencies = [
     "pydantic>=2.7",
     "rich>=13",
     "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 dynamic = ["version"]
 
@@ -68,6 +70,10 @@ path = "src/wicklight/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wicklight"]
+# The viewer frontend source (Svelte/Vite + node_modules) is a build-time input,
+# not a runtime artifact: only the prebuilt assets in viewer/assets/ ship in the
+# wheel, so a `pip install` needs no Node. See docs/viewer.md.
+exclude = ["src/wicklight/viewer/frontend"]
 
 [tool.ruff]
 target-version = "py310"
@@ -107,6 +113,11 @@ venv = ".venv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --cov=wicklight --cov-report=term-missing"
+filterwarnings = [
+    # Starlette's TestClient warns it uses httpx; we test the viewer through it
+    # and this is not actionable for us.
+    "ignore:Using `httpx` with `starlette.testclient`:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["wicklight"]

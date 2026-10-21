@@ -1,0 +1,180 @@
+"""The read-only viewer API behind `wicklight view` (DTN-247).
+
+These tests exercise the FastAPI app directly with a TestClient — no port is
+bound and no browser opens, so they are fast and offline.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from wicklight.agent import Agent
+from wicklight.providers import FakeProvider, FakeScript
+from wicklight.tools import MockWorld
+from wicklight.viewer.server import create_app
+from wicklight.viewer.source import RunSource, run_id_for, summarize
+
+SAMPLE = Path("examples/sample.jsonl")
+
+
+def _client(source: RunSource) -> TestClient:
+    # assets default to the packaged dir; the API is what we test here.
+    return TestClient(create_app(source))
+
+
+# --- run list -----------------------------------------------------------------
+
+
+def test_run_list_summarizes_the_sample_run() -> None:
+    client = _client(RunSource.from_path(SAMPLE))
+    runs = client.get("/api/runs").json()
+    assert len(runs) == 1
+    run = runs[0]
+    assert run["run_id"] == "sample"
+    assert run["agent"] == "inbox-summarizer"
+    assert run["status"] == "limit"
+    assert run["steps"] == 5
+    # The sample has one policy denial and one granted approval.
+    assert run["blocks"] == 1
+    assert run["approvals"] == 1
+    assert run["models"] == ["anthropic/claude-sonnet"]
+
+
+# --- events -------------------------------------------------------------------
+
+
+def test_events_endpoint_returns_every_event() -> None:
+    client = _client(RunSource.from_path(SAMPLE))
+    body = client.get("/api/runs/sample/events").json()
+    assert body["run_id"] == "sample"
+    assert len(body["events"]) == 17
+    assert body["events"][0]["type"] == "run_started"
+    # Every event carries the envelope the frontend relies on.
+    first = body["events"][0]
+    assert {"v", "run_id", "step", "timestamp", "type", "payload", "explain"} <= set(
+        first
+    )
+    assert body["issues"] == []
+
+
+def test_unknown_run_is_404() -> None:
+    client = _client(RunSource.from_path(SAMPLE))
+    response = client.get("/api/runs/does-not-exist/events")
+    assert response.status_code == 404
+    assert "does-not-exist" in response.json()["detail"]
+
+
+def test_corrupt_line_is_reported_but_other_events_survive(tmp_path: Path) -> None:
+    lines = SAMPLE.read_text(encoding="utf-8").splitlines()
+    corrupt = tmp_path / "run.jsonl"
+    corrupt.write_text(
+        lines[0] + "\n" + "{bad json\n" + "\n".join(lines[1:]) + "\n",
+        encoding="utf-8",
+    )
+    client = _client(RunSource.from_path(corrupt))
+    body = client.get("/api/runs/run/events").json()
+    assert len(body["events"]) == 17  # every real event survives the bad line
+    assert body["issues"] and body["issues"][0]["line"] == 2
+    assert body["issues"][0]["severity"] == "error"
+
+
+# --- blobs --------------------------------------------------------------------
+
+
+@pytest.fixture
+def recorded_run(tmp_path: Path) -> tuple[RunSource, str]:
+    """A real run whose trace references request/response blobs."""
+    agent_file = tmp_path / "a.md"
+    agent_file.write_text(
+        "---\nname: t\nmodels: { default: fake/x }\ntools: { read_inbox: read }\n"
+        "---\nGo.\n",
+        encoding="utf-8",
+    )
+    script = "responses:\n  - tool_calls:\n      - name: read_inbox\n  - text: done\n"
+    result = Agent.load(agent_file).run(
+        "go",
+        provider=FakeProvider(FakeScript.from_yaml(script)),
+        world=MockWorld.from_yaml("inbox:\n  - sender: a@b.com\n    subject: Hi\n"),
+        run_id="rec",
+        runs_dir=tmp_path,
+    )
+    assert result.trace_path is not None
+    return RunSource.from_path(result.trace_path), "rec"
+
+
+def test_blob_is_served_by_hash(recorded_run: tuple[RunSource, str]) -> None:
+    source, run_id = recorded_run
+    events = source.trace_for(run_id).events
+    refs = [
+        e.payload.request_ref
+        for e in events
+        if e.type == "model_called" and e.payload.request_ref
+    ]
+    assert refs, "expected a recorded request blob"
+    client = _client(source)
+    response = client.get(f"/api/runs/{run_id}/blobs/{refs[0]}")
+    assert response.status_code == 200
+    # Request blobs are JSON, so the endpoint labels them as such.
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.text
+
+
+def test_invalid_blob_ref_is_rejected(recorded_run: tuple[RunSource, str]) -> None:
+    source, run_id = recorded_run
+    client = _client(source)
+    # A ref that is not a 64-char sha256 hex digest is a bad request.
+    assert client.get(f"/api/runs/{run_id}/blobs/not-a-hash").status_code == 400
+
+
+def test_missing_blob_is_404(recorded_run: tuple[RunSource, str]) -> None:
+    source, run_id = recorded_run
+    client = _client(source)
+    absent = "0" * 64
+    assert client.get(f"/api/runs/{run_id}/blobs/{absent}").status_code == 404
+
+
+# --- assets fallback ----------------------------------------------------------
+
+
+def test_root_without_built_assets_explains_how_to_build(tmp_path: Path) -> None:
+    empty = tmp_path / "no-assets"
+    empty.mkdir()
+    app = create_app(RunSource.from_path(SAMPLE), assets=empty)
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "frontend assets are not built" in response.text
+    # The API still works without a frontend.
+    assert client.get("/api/runs").status_code == 200
+
+
+# --- source helpers -----------------------------------------------------------
+
+
+def test_run_id_strips_trace_suffixes() -> None:
+    assert run_id_for(Path("runs/run_123.jsonl")) == "run_123"
+    assert run_id_for(Path("runs/run_123.jsonl.gz")) == "run_123"
+
+
+def test_from_dir_lists_every_trace(tmp_path: Path) -> None:
+    (tmp_path / "a.jsonl").write_text(
+        SAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "b.jsonl").write_text(
+        SAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "notes.txt").write_text("ignore me", encoding="utf-8")
+    source = RunSource.from_dir(tmp_path)
+    assert set(source.run_ids()) == {"a", "b"}
+
+
+def test_summarize_reads_agent_and_outcome() -> None:
+    from wicklight.trace import read_trace
+
+    summary = summarize("sample", read_trace(SAMPLE))
+    assert summary.agent == "inbox-summarizer"
+    assert summary.status == "limit"
+    assert summary.steps == 5
