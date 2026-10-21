@@ -7,6 +7,13 @@ wicklight-solution-brief.md
 # Agent run traces (written to ./runs by `wicklight run`)
 runs/
 
+# Viewer frontend (Svelte/Vite): node_modules and build caches are build-time
+# inputs only. The prebuilt output in src/wicklight/viewer/assets/ IS committed
+# so a `pip install` needs no Node — do not ignore that.
+src/wicklight/viewer/frontend/node_modules/
+src/wicklight/viewer/frontend/.vite/
+src/wicklight/viewer/frontend/*.tsbuildinfo
+
 # API keys / secrets must never be committed — they belong in env vars.
 docs/claude-api-key
 *.key

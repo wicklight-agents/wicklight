@@ -334,6 +334,55 @@ def explain(
     render_explanation(Console(), explanation)
 
 
+@app.command()
+def view(
+    target: Annotated[
+        str,
+        typer.Argument(
+            help="A trace file (.jsonl/.jsonl.gz) or a run id under ./runs.",
+        ),
+    ],
+    host: Annotated[
+        str, typer.Option("--host", help="Address to bind (loopback by default).")
+    ] = "127.0.0.1",
+    port: Annotated[
+        int, typer.Option("--port", help="Port to bind (0 picks a free one).")
+    ] = 0,
+    no_browser: Annotated[
+        bool, typer.Option("--no-browser", help="Do not open a browser.")
+    ] = False,
+) -> None:
+    """Open a local web viewer for a run trace (offline, no account)."""
+    from wicklight.viewer.server import serve
+    from wicklight.viewer.source import RunSource
+
+    trace_path = _resolve_trace_target(target)
+    if trace_path is None:
+        typer.echo(f"no trace found for: {target}", err=True)
+        raise typer.Exit(code=1)
+    try:
+        serve(
+            RunSource.from_path(trace_path),
+            host=host,
+            port=port,
+            open_browser=not no_browser,
+        )
+    except KeyboardInterrupt:  # Ctrl+C is the documented way to stop.
+        typer.echo("\nstopped.")
+
+
+def _resolve_trace_target(target: str) -> Path | None:
+    """Resolve a CLI target to a trace file: a direct path or a ./runs run id."""
+    direct = Path(target)
+    if direct.is_file():
+        return direct
+    for suffix in (".jsonl", ".jsonl.gz"):
+        candidate = Path("runs") / f"{target}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 providers_app = typer.Typer(
     name="providers", help="Inspect installed provider plugins.", no_args_is_help=True
 )
