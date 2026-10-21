@@ -77,5 +77,20 @@ either source latches the run.)
 
 ## Fallbacks
 
-The `fallback` list — trying other models when the chosen one fails, while
-honoring the sensitivity gate above — arrives in DTN-244.
+When the chosen model fails after its retry policy (DTN-228), the harness tries
+the `fallback` list in order (DTN-244):
+
+```yaml
+models:
+  default: anthropic/claude-sonnet
+  fallback: [openai/gpt-4o, local/llama3.1]
+```
+
+Each failure is a trace `error` event (`where: "fallback"`) naming the model
+that failed, why, and which model is next — `model X failed (overloaded): …;
+falling back to Y`. If every option fails, the run stops with a terminal error
+listing what was tried and the last failure's reason.
+
+Fallbacks never bypass sensitivity: in a sensitive run a fallback that isn't
+allowed for sensitive data is **skipped** (and the skip is logged), never
+called. If that leaves nothing allowed, the run stops rather than leak.
