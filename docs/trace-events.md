@@ -106,6 +106,9 @@ category: `rate_limit`, `overloaded`, `timeout`, `auth`, `invalid_request`,
 overloaded) is logged `recoverable=true` with the attempt and wait before the
 core retries; nothing retries silently. A preflight capability mismatch
 (`where: "preflight"`, DTN-232) stops the run at step 0 before any model call.
+Fallback events use `where: "fallback"` (DTN-244): a recoverable one per model
+that fails or is skipped for sensitivity, then a terminal one when all options
+are exhausted. A sensitivity deadend uses `where: "sensitivity"` (DTN-245).
 *explain:* `error: rate limited (429) — retrying (attempt 1/2) in 1s`
 
 ### `run_finished`

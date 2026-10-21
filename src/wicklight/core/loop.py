@@ -252,6 +252,7 @@ async def run_agent(
     ctx = ctx if ctx is not None else ToolContext(run_id=run_id)
     default_model = config.models.default.value
     route_pairs = [(r.when, r.use) for r in config.models.routes.value]
+    fallback_models = list(config.models.fallback.value)
     sensitive_allowed = allowed_sensitive_models(route_pairs)
     providers = providers or {}
     max_steps = config.limits.max_steps.value
@@ -407,62 +408,29 @@ async def run_agent(
                 ),
             )
 
-            try:
-                step_provider = _provider_for(
-                    model_id, default_model, provider, providers
-                )
-            except ProviderError as exc:
-                log.emit(
-                    ErrorEvent,
-                    step,
-                    f"error: {exc}",
-                    ErrorPayload(message=str(exc), where="routing"),
-                )
-                status = RunStatus.ERROR
-                break
-
-            request = ModelRequest(model=model_id, messages=messages, tools=tool_defs)
-            request_ref = writer.store_blob(request.model_dump_json())
-            log.emit(
-                ModelCalled,
-                step,
-                f"called {model_id}",
-                ModelCalledPayload(model=model_id, request_ref=request_ref),
+            # Call the model, falling back through the fallback list on failure
+            # (DTN-244). The helper records model_called/model_responded and the
+            # fallback events; it returns None when every option fails.
+            response = await _call_with_fallback(
+                primary=model_id,
+                fallback=fallback_models,
+                messages=messages,
+                tool_defs=tool_defs,
+                default_model=default_model,
+                default_provider=provider,
+                providers=providers,
+                run_sensitive=run_sensitive,
+                sensitive_allowed=sensitive_allowed,
+                max_retries=max_retries,
+                backoff=retry_backoff,
+                log=log,
+                step=step,
             )
-            try:
-                response = await _complete_with_retries(
-                    step_provider,
-                    request,
-                    max_retries=max_retries,
-                    backoff=retry_backoff,
-                    log=log,
-                    step=step,
-                )
-            except ProviderError as exc:
-                # Not retryable (or retries exhausted): stop with a clear error
-                # and, where we have one, a suggested fix.
-                log.emit(
-                    ErrorEvent,
-                    step,
-                    f"error: {exc}",
-                    ErrorPayload(
-                        message=str(exc),
-                        where="model_called",
-                        kind=exc.kind.value,
-                        suggestion=exc.suggestion,
-                    ),
-                )
+            if response is None:
                 status = RunStatus.ERROR
                 break
 
             usage = _add_usage(usage, response.usage)
-            response_ref = writer.store_blob(response.model_dump_json())
-            log.emit(
-                ModelResponded,
-                step,
-                _responded_explain(response),
-                _responded_payload(model_id, response, response_ref),
-            )
 
             if usage.cost_usd is not None and usage.cost_usd > max_cost:
                 log.emit(
@@ -754,6 +722,145 @@ def _provider_for(
     raise ProviderError(
         f"no provider available for routed model {model_id!r}; it is not installed"
     )
+
+
+async def _call_with_fallback(
+    *,
+    primary: str,
+    fallback: list[str],
+    messages: list[Message],
+    tool_defs: list[ToolDefinition],
+    default_model: str,
+    default_provider: Provider,
+    providers: Mapping[str, Provider],
+    run_sensitive: bool,
+    sensitive_allowed: set[str],
+    max_retries: int,
+    backoff: float,
+    log: TraceLog,
+    step: int,
+) -> ModelResponse | None:
+    """Call the model, trying the fallback list in order on failure (DTN-244).
+
+    Records model_called/model_responded for the attempt that answers, a
+    recoverable error for each model that fails, and a skip for any fallback not
+    allowed under sensitivity. Returns the response, or None when every option
+    is exhausted (after emitting a terminal error listing what was tried).
+    """
+    candidates = [primary] + [m for m in fallback if m != primary]
+    attempted: list[str] = []
+    skipped: list[str] = []
+    last: ProviderError | None = None
+
+    for index, model_id in enumerate(candidates):
+        # Fallbacks never bypass sensitivity (the primary already passed the
+        # router's gate). A disallowed candidate is skipped and logged.
+        if run_sensitive and model_id not in sensitive_allowed:
+            skipped.append(model_id)
+            log.emit(
+                ErrorEvent,
+                step,
+                f"fallback {model_id} skipped: not allowed for sensitive data",
+                ErrorPayload(
+                    message=f"{model_id} is not allowed for sensitive data",
+                    where="fallback",
+                    recoverable=True,
+                ),
+            )
+            continue
+        try:
+            provider = _provider_for(
+                model_id, default_model, default_provider, providers
+            )
+        except ProviderError as exc:
+            skipped.append(model_id)
+            last = exc
+            log.emit(
+                ErrorEvent,
+                step,
+                f"fallback {model_id} skipped: {exc}",
+                ErrorPayload(message=str(exc), where="fallback", recoverable=True),
+            )
+            continue
+
+        attempted.append(model_id)
+        request = ModelRequest(model=model_id, messages=messages, tools=tool_defs)
+        request_ref = log.store_blob(request.model_dump_json())
+        log.emit(
+            ModelCalled,
+            step,
+            f"called {model_id}",
+            ModelCalledPayload(model=model_id, request_ref=request_ref),
+        )
+        try:
+            response = await _complete_with_retries(
+                provider,
+                request,
+                max_retries=max_retries,
+                backoff=backoff,
+                log=log,
+                step=step,
+            )
+        except ProviderError as exc:
+            last = exc
+            nxt = _next_candidate(candidates, index, run_sensitive, sensitive_allowed)
+            # Only log a per-model fallback event when there is a next model to
+            # try; the final failure is covered by the terminal error below, so
+            # it isn't double-reported.
+            if nxt is not None:
+                log.emit(
+                    ErrorEvent,
+                    step,
+                    f"model {model_id} failed ({exc.kind.value}): {exc}; "
+                    f"falling back to {nxt}",
+                    ErrorPayload(
+                        message=str(exc),
+                        where="fallback",
+                        kind=exc.kind.value,
+                        recoverable=True,
+                    ),
+                )
+            continue
+
+        response_ref = log.store_blob(response.model_dump_json())
+        log.emit(
+            ModelResponded,
+            step,
+            _responded_explain(response),
+            _responded_payload(model_id, response, response_ref),
+        )
+        return response
+
+    tried = ", ".join(attempted) or "none"
+    detail = f" (tried: {tried}" + (
+        f"; skipped: {', '.join(skipped)}" if skipped else ""
+    )
+    detail += ")"
+    message = f"all models failed{detail}"
+    if last is not None:
+        message += f": {last}"  # the last failure's reason (redacted on write)
+    log.emit(
+        ErrorEvent,
+        step,
+        f"error: {message}",
+        ErrorPayload(
+            message=message,
+            where="fallback",
+            kind=last.kind.value if last else None,
+            suggestion=last.suggestion if last else None,
+        ),
+    )
+    return None
+
+
+def _next_candidate(
+    candidates: list[str], index: int, run_sensitive: bool, allowed: set[str]
+) -> str | None:
+    """The next candidate after ``index`` that sensitivity wouldn't skip."""
+    for model_id in candidates[index + 1 :]:
+        if not run_sensitive or model_id in allowed:
+            return model_id
+    return None
 
 
 #: Argument names a monetary amount may appear under, for per-run spend tracking.

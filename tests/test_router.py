@@ -94,8 +94,9 @@ def test_missing_routed_provider_stops_with_an_error() -> None:
         "  routes:\n    - when: { step: planning }\n      use: ghost/m\n"
         "tools: {}\n---\nGo.\n"
     )
-    # Only the default provider is supplied; ghost/m is unresolved.
+    # Only the default provider is supplied; ghost/m is unresolved, so the call
+    # (with no fallback to fall back to) stops the run with a clear error.
     result, events = _run(agent, {"exec/m": FakeProvider(EXEC)})
     assert result.stopped
-    errors = [e for e in events if e.type == "error" and e.payload.where == "routing"]
-    assert errors and "ghost/m" in errors[0].payload.message
+    errors = [e for e in events if e.type == "error" and e.payload.where == "fallback"]
+    assert errors and "ghost/m" in errors[-1].payload.message
