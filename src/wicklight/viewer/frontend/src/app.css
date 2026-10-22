@@ -367,3 +367,89 @@ pre {
   margin: 1rem 0;
   font-size: 0.85rem;
 }
+
+/* Run list */
+.run-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.run-list-head,
+.run-list-row {
+  display: grid;
+  grid-template-columns: 12rem 1fr 9rem 4rem 5rem 4rem 5rem;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+}
+
+.run-list-head {
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line);
+}
+
+.run-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.run-list li {
+  border-bottom: 1px solid var(--line);
+}
+
+.run-list li:last-child {
+  border-bottom: none;
+}
+
+.run-list-row {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: var(--bg);
+  color: var(--fg);
+  border: none;
+  cursor: pointer;
+}
+
+.run-list-row:hover {
+  background: var(--panel);
+}
+
+.run-list .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.run-list .num.flag {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.run-list .agent {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.back {
+  font: inherit;
+  font-size: 0.82rem;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0 0 0.6rem;
+}
+
+.live {
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+}

@@ -13,6 +13,9 @@ runs/
 src/wicklight/viewer/frontend/node_modules/
 src/wicklight/viewer/frontend/.vite/
 src/wicklight/viewer/frontend/*.tsbuildinfo
+# Playwright (local e2e) outputs
+src/wicklight/viewer/frontend/playwright-report/
+src/wicklight/viewer/frontend/test-results/
 
 # API keys / secrets must never be committed — they belong in env vars.
 docs/claude-api-key
