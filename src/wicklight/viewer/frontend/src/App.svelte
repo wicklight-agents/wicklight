@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getEvents, listRuns, type RunEvents, type RunSummary } from "./lib/api";
+  import RunHeader from "./components/RunHeader.svelte";
+  import Timeline from "./components/Timeline.svelte";
 
-  // PR A skeleton: load the first (usually only) run and list its events so we
-  // can prove the page talks to the local API. The rich timeline and expandable
-  // step panels arrive in DTN-248/249.
+  // Load the first (usually only) run and show it as a timeline. The run list
+  // and live view arrive in DTN-250.
   let run = $state<RunSummary | null>(null);
   let data = $state<RunEvents | null>(null);
   let error = $state<string | null>(null);
@@ -32,25 +33,7 @@
   {:else if !run || !data}
     <p class="muted">Loading…</p>
   {:else}
-    <header class="summary">
-      <span class="agent">{run.agent ?? "(unknown agent)"}</span>
-      <span class="status status-{run.status}">{run.status ?? "running"}</span>
-      <span class="muted">{run.steps ?? "?"} steps</span>
-      {#if run.models.length}<span class="muted">{run.models.join(", ")}</span>{/if}
-      {#if run.blocks}<span class="pill blocked">{run.blocks} blocked</span>{/if}
-      {#if run.approvals}<span class="pill approved">{run.approvals} approved</span>{/if}
-    </header>
-
-    <ol class="events">
-      {#each data.events as event (event.step + ":" + event.type + ":" + event.timestamp)}
-        <li>
-          <span class="step">#{event.step}</span>
-          <span class="type">{event.type}</span>
-          <span class="explain">{event.explain}</span>
-        </li>
-      {/each}
-    </ol>
-
+    <RunHeader {run} events={data.events} />
     {#if data.issues.length}
       <section class="issues">
         <h2>issues</h2>
@@ -61,5 +44,6 @@
         </ul>
       </section>
     {/if}
+    <Timeline runId={run.run_id} events={data.events} />
   {/if}
 </main>

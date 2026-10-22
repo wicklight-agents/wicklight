@@ -1,0 +1,1 @@
+{"content":"","tool_calls":[{"id":"call_1_0","name":"read_inbox","arguments":{}}],"stop_reason":"tool_use","usage":{"input_tokens":21,"output_tokens":0,"cost_usd":null}}
