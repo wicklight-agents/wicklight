@@ -43,6 +43,7 @@ wicklight` is enough and **users never need Node**.
 cd src/wicklight/viewer/frontend
 npm install            # once
 npm run check          # svelte-check (type-check)
+npm test               # vitest unit tests for the pure logic in src/lib
 npm run build          # writes ../assets/ (committed)
 npm run dev            # hot-reload dev server; proxies /api to a running `wicklight view`
 ```
@@ -51,5 +52,24 @@ The built `assets/` are committed so a source checkout works without a Node
 build step; CI rebuilds them to verify they are current (DTN-251). The frontend
 source and `node_modules/` are excluded from the wheel — only `assets/` ships.
 
-> The timeline and step-detail components are built on this API in DTN-248 and
-> DTN-249; the run list and live view in DTN-250.
+## What the page shows
+
+The app renders a run as a **run header** (agent, outcome, steps, models, token
+usage, cost, duration) over a **timeline** of steps. Each step row shows its key
+action in plain words and badges for blocked, approved, waived, retried, limit,
+dry-run, and sensitive actions — each badge pairs an icon and a label with its
+color, so status never depends on color alone. Filter to blocks, approvals, or
+errors, or jump to a step number.
+
+Expanding a step opens its **detail panel** (the browser version of
+`wicklight explain`): the routing decision, the context the model saw with
+untrusted tool results boxed and labeled by source tool, the model's response
+and proposed tool calls, each permission/policy/limit/approval check with its
+reason and agent-file line, the tool result (lazily loaded from the blob store),
+and the raw JSON events with copy buttons.
+
+The step-grouping and formatting logic lives in `src/lib/` (`steps.ts`,
+`format.ts`) as pure, unit-tested functions so the game's replay viewer can
+reuse them. Component and end-to-end (Playwright) tests arrive with DTN-251.
+
+> The run list and live-follow view arrive in DTN-250.

@@ -18,6 +18,7 @@ from wicklight.viewer.server import create_app
 from wicklight.viewer.source import RunSource, run_id_for, summarize
 
 SAMPLE = Path("examples/sample.jsonl")
+INJECTION = Path("tests/fixtures/viewer/injection.jsonl")
 
 
 def _client(source: RunSource) -> TestClient:
@@ -134,6 +135,38 @@ def test_missing_blob_is_404(recorded_run: tuple[RunSource, str]) -> None:
     client = _client(source)
     absent = "0" * 64
     assert client.get(f"/api/runs/{run_id}/blobs/{absent}").status_code == 404
+
+
+# --- the committed injection fixture (DTN-248/249 demo) -----------------------
+
+
+def test_injection_fixture_serves_the_untrusted_email_and_block() -> None:
+    client = _client(RunSource.from_path(INJECTION))
+    body = client.get("/api/runs/injection/events").json()
+
+    # The send to the attacker is blocked, and the block cites the policy line.
+    blocked = [
+        e
+        for e in body["events"]
+        if e["type"] == "policy_checked" and e["payload"]["decision"] == "deny"
+    ]
+    assert blocked and "line 22" in blocked[0]["explain"]
+
+    # The step where the block happened recorded the context the model saw; its
+    # request blob carries the poisoned email as an untrusted tool result.
+    blocked_step = blocked[0]["step"]
+    called = [
+        e
+        for e in body["events"]
+        if e["type"] == "model_called" and e["step"] == blocked_step
+    ]
+    ref = called[0]["payload"]["request_ref"]
+    blob = client.get(f"/api/runs/injection/blobs/{ref}")
+    assert blob.status_code == 200
+    messages = blob.json()["messages"]
+    poisoned = [m for m in messages if m["role"] == "tool" and not m["trusted"]]
+    assert poisoned and "attacker@evil.com" in poisoned[0]["content"]
+    assert poisoned[0]["name"] == "read_inbox"
 
 
 # --- assets fallback ----------------------------------------------------------

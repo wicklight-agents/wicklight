@@ -28,15 +28,18 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+#   Anchored to the repo root with a leading slash: these are Python build
+#   artifacts at the project root, not any nested dir. Without the slash, the
+#   generic `lib/` would also ignore src/wicklight/viewer/frontend/src/lib/.
 .Python
-build/
+/build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/

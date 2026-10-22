@@ -32,17 +32,21 @@ Then run the CLI with `uv run` (no venv activation needed):
 ```bash
 uv run wicklight --version              # 0.1.0
 uv run wicklight --help                 # list commands
-uv run wicklight check examples/inbox.md  # validate an agent file
+uv run wicklight check examples/inbox.md                 # validate an agent file
+uv run wicklight run examples/inbox.md "summarize my inbox" \
+  --fake examples/scripts/summarize.yaml \
+  --world examples/worlds/inbox.yaml --trace              # run it (offline, scripted)
+uv run wicklight view examples/sample.jsonl              # open a run in the web viewer
 ```
 
 Prefer a bare `wicklight` command? Either activate the venv
 (`source .venv/bin/activate`) or install it as a tool
 (`uv tool install --editable .`).
 
-> **Early days.** `check` validates an agent file and prints its effective
-> config. `run` and `trace` are still placeholders that exit with a clear "not
-> implemented yet" message — they land in later milestones (M3 `trace`, M5
-> `run`).
+> `wicklight --help` lists every command: `check` (validate an agent file),
+> `run` (run an agent with full tracing), `trace show`, `replay` and `explain`
+> (inspect a past run offline), `view` (the local web viewer), and `providers`.
+> The guides below go deeper.
 
 ## Examples
 
@@ -59,6 +63,24 @@ one concept and passes `wicklight check`:
 ```bash
 uv run wicklight check examples/payments.md
 ```
+
+## Documentation
+
+Topic guides live in [`docs/`](./docs):
+
+- [The loop](./docs/the-loop.md) — the fixed agent loop and its safety stack.
+- [Trace events](./docs/trace-events.md) — the JSONL trace, event by event.
+- [Policies](./docs/policies.md) and [Approvals & waivers](./docs/approvals.md)
+  — the allow/deny and human-in-the-loop gates.
+- [Model routing](./docs/routing.md) — per-step model choice, fallback, and
+  enforced sensitivity routing.
+- [Replay, explain & dry-run](./docs/replay.md) — re-inspect a run offline.
+- [The local web viewer](./docs/viewer.md) — `wicklight view`, the browser UI
+  for a run's timeline and step details.
+- Providers: [credentials](./docs/credentials.md),
+  [local models](./docs/local-models.md),
+  [recorded HTTP](./docs/recorded-http.md),
+  [model types](./docs/model-types.md).
 
 ## Development
 
