@@ -337,11 +337,11 @@ def explain(
 @app.command()
 def view(
     target: Annotated[
-        str,
+        str | None,
         typer.Argument(
-            help="A trace file (.jsonl/.jsonl.gz) or a run id under ./runs.",
+            help="A trace file or run id. Omit to list all runs under ./runs.",
         ),
-    ],
+    ] = None,
     host: Annotated[
         str, typer.Option("--host", help="Address to bind (loopback by default).")
     ] = "127.0.0.1",
@@ -351,33 +351,62 @@ def view(
     no_browser: Annotated[
         bool, typer.Option("--no-browser", help="Do not open a browser.")
     ] = False,
+    live: Annotated[
+        bool,
+        typer.Option("--live", help="Follow a run in progress, appending steps."),
+    ] = False,
+    runs_dir: Annotated[
+        Path, typer.Option("--runs-dir", help="Directory of run traces.")
+    ] = Path("runs"),
 ) -> None:
-    """Open a local web viewer for a run trace (offline, no account)."""
-    from wicklight.viewer.server import serve
-    from wicklight.viewer.source import RunSource
+    """Open a local web viewer for runs (offline, no account).
 
-    trace_path = _resolve_trace_target(target)
-    if trace_path is None:
-        typer.echo(f"no trace found for: {target}", err=True)
-        raise typer.Exit(code=1)
+    With no target, lists every run under ``--runs-dir``. With a trace file or
+    run id, opens that run; add ``--live`` to follow it as it is written.
+    """
+    from wicklight.viewer.server import serve
+    from wicklight.viewer.source import RunSource, run_id_for
+
+    live_run_id: str | None = None
+    if target is None:
+        if live:
+            typer.echo("--live needs a run id or trace file.", err=True)
+            raise typer.Exit(code=1)
+        source = RunSource.from_dir(runs_dir)
+        if not source.run_ids():
+            typer.echo(f"no runs found in {runs_dir}/", err=True)
+            raise typer.Exit(code=1)
+    else:
+        trace_path = _resolve_trace_target(target, runs_dir)
+        if trace_path is None:
+            typer.echo(f"no trace found for: {target}", err=True)
+            raise typer.Exit(code=1)
+        # Serve the whole runs dir when present so run-list links resolve too.
+        source = RunSource.from_dir(runs_dir)
+        if run_id_for(trace_path) not in source.run_ids():
+            source = RunSource.from_path(trace_path)
+        if live:
+            live_run_id = run_id_for(trace_path)
+
     try:
         serve(
-            RunSource.from_path(trace_path),
+            source,
             host=host,
             port=port,
             open_browser=not no_browser,
+            live_run_id=live_run_id,
         )
     except KeyboardInterrupt:  # Ctrl+C is the documented way to stop.
         typer.echo("\nstopped.")
 
 
-def _resolve_trace_target(target: str) -> Path | None:
-    """Resolve a CLI target to a trace file: a direct path or a ./runs run id."""
+def _resolve_trace_target(target: str, runs_dir: Path) -> Path | None:
+    """Resolve a CLI target to a trace file: a direct path or a run id."""
     direct = Path(target)
     if direct.is_file():
         return direct
     for suffix in (".jsonl", ".jsonl.gz"):
-        candidate = Path("runs") / f"{target}{suffix}"
+        candidate = runs_dir / f"{target}{suffix}"
         if candidate.is_file():
             return candidate
     return None

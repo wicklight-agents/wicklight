@@ -6,6 +6,7 @@ bound and no browser opens, so they are fast and offline.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ from fastapi.testclient import TestClient
 from wicklight.agent import Agent
 from wicklight.providers import FakeProvider, FakeScript
 from wicklight.tools import MockWorld
-from wicklight.viewer.server import create_app
+from wicklight.viewer.server import _stream_events, create_app
 from wicklight.viewer.source import RunSource, run_id_for, summarize
 
 SAMPLE = Path("examples/sample.jsonl")
@@ -167,6 +168,70 @@ def test_injection_fixture_serves_the_untrusted_email_and_block() -> None:
     poisoned = [m for m in messages if m["role"] == "tool" and not m["trusted"]]
     assert poisoned and "attacker@evil.com" in poisoned[0]["content"]
     assert poisoned[0]["name"] == "read_inbox"
+
+
+# --- run list metadata + live stream (DTN-250) --------------------------------
+
+
+def test_meta_reports_run_count_and_live_flag() -> None:
+    client = _client(RunSource.from_dir("tests/fixtures/viewer"))
+    meta = client.get("/api/meta").json()
+    assert meta["live"] is False
+    assert meta["run_count"] == 1
+    assert meta["single_run_id"] == "injection"
+
+    live_client = TestClient(
+        create_app(RunSource.from_path(INJECTION), live_run_id="injection")
+    )
+    live_meta = live_client.get("/api/meta").json()
+    assert live_meta["live"] is True
+    assert live_meta["live_run_id"] == "injection"
+
+
+def test_stream_of_unknown_run_is_404() -> None:
+    client = _client(RunSource.from_path(SAMPLE))
+    assert client.get("/api/runs/nope/stream").status_code == 404
+
+
+class _NeverDisconnected:
+    """Stand-in for a Starlette Request that stays connected."""
+
+    async def is_disconnected(self) -> bool:
+        return False
+
+
+def test_stream_appends_events_as_the_trace_grows(tmp_path: Path) -> None:
+    # A live run is a trace file being appended to. The stream should emit the
+    # events present so far, then new ones as they are written, then end.
+    lines = SAMPLE.read_text(encoding="utf-8").splitlines()
+    live = tmp_path / "live.jsonl"
+    live.write_text("\n".join(lines[:3]) + "\n", encoding="utf-8")  # no run_finished
+    source = RunSource.from_path(live)
+
+    async def drive() -> tuple[int, bool]:
+        gen = _stream_events(source, "live", _NeverDisconnected())  # type: ignore[arg-type]
+        received = 0
+        ended = False
+        appended = False
+        for _ in range(100):
+            try:
+                chunk = (await asyncio.wait_for(gen.__anext__(), timeout=3)).decode()
+            except StopAsyncIteration:
+                break
+            if chunk.startswith("event: end"):
+                ended = True
+                break
+            received += 1
+            # After the initial batch arrives, write the rest of the run.
+            if not appended and received >= 3:
+                live.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                appended = True
+        await gen.aclose()
+        return received, ended
+
+    received, ended = asyncio.run(drive())
+    assert ended
+    assert received == len(lines)  # every event delivered across both writes
 
 
 # --- assets fallback ----------------------------------------------------------

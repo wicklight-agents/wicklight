@@ -42,3 +42,67 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+  frontend:
+    name: viewer frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/wicklight/viewer/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/wicklight/viewer/frontend
+        run: npm ci
+
+      - name: Type-check (svelte-check)
+        working-directory: src/wicklight/viewer/frontend
+        run: npm run check
+
+      - name: Unit + component tests (vitest)
+        working-directory: src/wicklight/viewer/frontend
+        run: npm test
+
+      - name: Build
+        working-directory: src/wicklight/viewer/frontend
+        run: npm run build
+
+      - name: Committed assets are up to date
+        # The built assets ship in the wheel, so a stale commit would ship stale
+        # UI. Fail if `npm run build` changed anything that was committed.
+        run: git diff --exit-code src/wicklight/viewer/assets
+
+  viewer-wheel:
+    name: viewer wheel smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build the wheel
+        run: uv build --wheel -o dist
+
+      - name: Fresh install serves the viewer (assets ship in the wheel)
+        run: |
+          uv venv /tmp/wheel-env
+          uv pip install --python /tmp/wheel-env dist/*.whl
+          /tmp/wheel-env/bin/wicklight view examples/sample.jsonl \
+            --no-browser --port 8799 &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:8799/api/runs >/dev/null 2>&1 && break
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:8799/api/runs | grep -q '"run_id"'
+          curl -fsS http://127.0.0.1:8799/ | grep -q '<div id="app">'

@@ -46,7 +46,39 @@ async function getJson<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export interface RunMeta {
+  live: boolean;
+  live_run_id: string | null;
+  run_count: number;
+  single_run_id: string | null;
+}
+
+export const getMeta = (): Promise<RunMeta> => getJson("/api/meta");
+
 export const listRuns = (): Promise<RunSummary[]> => getJson("/api/runs");
+
+// Follow a run as it is written. Returns the EventSource so the caller can
+// close it. `onEvent` fires per trace event; `onEnd` when the run finishes.
+export function streamEvents(
+  runId: string,
+  onEvent: (event: TraceEvent) => void,
+  onEnd: () => void,
+): EventSource {
+  const es = new EventSource(`/api/runs/${encodeURIComponent(runId)}/stream`);
+  es.onmessage = (msg) => {
+    if (msg.data) onEvent(JSON.parse(msg.data) as TraceEvent);
+  };
+  es.addEventListener("end", () => {
+    onEnd();
+    es.close();
+  });
+  es.onerror = () => {
+    // The browser auto-reconnects; on a closed stream it will error. Close to
+    // stop retrying once we've seen the end or the server is gone.
+    if (es.readyState === EventSource.CLOSED) onEnd();
+  };
+  return es;
+}
 
 export const getEvents = (runId: string): Promise<RunEvents> =>
   getJson(`/api/runs/${encodeURIComponent(runId)}/events`);

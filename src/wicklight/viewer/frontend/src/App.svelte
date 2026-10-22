@@ -1,24 +1,24 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getEvents, listRuns, type RunEvents, type RunSummary } from "./lib/api";
-  import RunHeader from "./components/RunHeader.svelte";
-  import Timeline from "./components/Timeline.svelte";
+  import { getMeta, listRuns, type RunMeta, type RunSummary } from "./lib/api";
+  import RunList from "./components/RunList.svelte";
+  import RunView from "./components/RunView.svelte";
 
-  // Load the first (usually only) run and show it as a timeline. The run list
-  // and live view arrive in DTN-250.
-  let run = $state<RunSummary | null>(null);
-  let data = $state<RunEvents | null>(null);
+  let meta = $state<RunMeta | null>(null);
+  let runs = $state<RunSummary[]>([]);
+  let selected = $state<string | null>(null);
   let error = $state<string | null>(null);
+
+  // When several runs are served, selecting one should offer a way back.
+  const canList = $derived((meta?.run_count ?? 0) > 1);
+  const isLive = $derived(meta?.live === true && selected === meta?.live_run_id);
 
   onMount(async () => {
     try {
-      const runs = await listRuns();
-      if (runs.length === 0) {
-        error = "No runs found.";
-        return;
-      }
-      run = runs[0];
-      data = await getEvents(run.run_id);
+      meta = await getMeta();
+      runs = await listRuns();
+      // Live run wins; otherwise a single run opens directly; many runs list.
+      selected = meta.live_run_id ?? meta.single_run_id ?? null;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -30,20 +30,19 @@
 
   {#if error}
     <p class="error">{error}</p>
-  {:else if !run || !data}
+  {:else if !meta}
     <p class="muted">Loading…</p>
+  {:else if selected}
+    {#key selected}
+      <RunView
+        runId={selected}
+        live={isLive}
+        onBack={canList ? () => (selected = null) : undefined}
+      />
+    {/key}
+  {:else if runs.length === 0}
+    <p class="muted">No runs found.</p>
   {:else}
-    <RunHeader {run} events={data.events} />
-    {#if data.issues.length}
-      <section class="issues">
-        <h2>issues</h2>
-        <ul>
-          {#each data.issues as issue (issue.line)}
-            <li>line {issue.line}: {issue.message} ({issue.severity})</li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
-    <Timeline runId={run.run_id} events={data.events} />
+    <RunList {runs} onSelect={(id) => (selected = id)} />
   {/if}
 </main>
