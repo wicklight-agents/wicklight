@@ -1,0 +1,24 @@
+# deploy.yaml — how to run an agent, kept separate from the agent itself so the
+# same agent file runs unchanged locally and deployed. Validate it with:
+#
+#   uv run wicklight check examples/deploy.yaml
+#
+name: inbox-summarizer
+agent: inbox.md
+
+triggers:
+  # Weekday mornings at 08:00.
+  - schedule: "0 8 * * 1-5"
+  # And on demand via a local webhook (shared-secret, loopback — see M12).
+  - webhook: { path: /run }
+
+secrets:
+  # Resolved on the host at start and handed only to the tools that need them;
+  # the model never sees them and they never reach a trace.
+  EMAIL_TOKEN: { from: env }
+
+traces: ./runs
+
+egress:
+  # Model-provider and tool hosts are added automatically; list anything extra.
+  extra_hosts: []

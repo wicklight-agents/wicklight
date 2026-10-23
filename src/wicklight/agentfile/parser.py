@@ -22,13 +22,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
 
-from ruamel.yaml import YAML
-from ruamel.yaml.error import YAMLError
+from wicklight.yamlsource import (
+    KeyPath,
+    YamlSourceError,
+    load_with_lines,
+    to_plain,
+)
 
 _DELIMITER = "---"
-
-# A path to a frontmatter value: mapping keys (str) and list indices (int).
-KeyPath = tuple[str | int, ...]
 
 
 class AgentFileError(Exception):
@@ -76,11 +77,13 @@ def parse_agent_file(text: str, *, path: Path | None = None) -> AgentFile:
     delimiters or invalid YAML.
     """
     yaml_source, body, line_offset = _split_frontmatter(text)
-    raw = _load_yaml(yaml_source, line_offset=line_offset)
+    try:
+        raw, lines = load_with_lines(yaml_source, line_offset=line_offset)
+    except YamlSourceError as exc:
+        raise AgentFileError(
+            f"invalid YAML in frontmatter: {exc}", line=exc.line
+        ) from exc
     frontmatter = _frontmatter_mapping(raw, line_offset=line_offset)
-
-    lines: dict[KeyPath, int] = {}
-    _build_line_index(raw, offset=line_offset, prefix=(), out=lines)
 
     return AgentFile(
         frontmatter=frontmatter,
@@ -95,7 +98,7 @@ def _frontmatter_mapping(raw: object, *, line_offset: int) -> dict[str, Any]:
     if raw is None:
         return {}
     if isinstance(raw, dict):
-        return cast("dict[str, Any]", _to_plain(cast("dict[Any, Any]", raw)))
+        return cast("dict[str, Any]", to_plain(cast("dict[Any, Any]", raw)))
     raise AgentFileError(
         f"frontmatter must be a mapping of keys, got {type(raw).__name__}",
         line=line_offset,
@@ -128,54 +131,3 @@ def _split_frontmatter(text: str) -> tuple[str, str, int]:
     # Opening delimiter is line 1, so the first YAML line is line 2.
     line_offset = 2
     return yaml_source, body, line_offset
-
-
-def _load_yaml(source: str, *, line_offset: int) -> object:
-    """Load YAML in round-trip mode (which retains line info), or raise."""
-    yaml: Any = YAML()  # round-trip loader; nodes carry ``.lc`` line/column info
-    try:
-        return yaml.load(source)
-    except YAMLError as exc:
-        mark = getattr(exc, "problem_mark", None)
-        line = int(getattr(mark, "line", 0)) + line_offset if mark is not None else None
-        raise AgentFileError(f"invalid YAML in frontmatter: {exc}", line=line) from exc
-
-
-def _build_line_index(
-    node: object, *, offset: int, prefix: KeyPath, out: dict[KeyPath, int]
-) -> None:
-    """Walk a ruamel node, recording the source line of every key and item."""
-    lc_data = _lc_data(node)
-    if isinstance(node, dict):
-        for key, value in cast("dict[object, object]", node).items():
-            token = _path_token(key)
-            if lc_data is not None and key in lc_data:
-                out[(*prefix, token)] = int(lc_data[key][0]) + offset
-            _build_line_index(value, offset=offset, prefix=(*prefix, token), out=out)
-    elif isinstance(node, list):
-        for index, value in enumerate(cast("list[object]", node)):
-            if lc_data is not None and index in lc_data:
-                out[(*prefix, index)] = int(lc_data[index][0]) + offset
-            _build_line_index(value, offset=offset, prefix=(*prefix, index), out=out)
-
-
-def _lc_data(node: object) -> dict[Any, Any] | None:
-    """Return a ruamel node's ``.lc.data`` line map, or ``None`` if absent."""
-    lc = getattr(node, "lc", None)
-    data = getattr(lc, "data", None) if lc is not None else None
-    return cast("dict[Any, Any] | None", data)
-
-
-def _path_token(key: object) -> str | int:
-    return key if isinstance(key, (str, int)) else str(key)
-
-
-def _to_plain(node: object) -> object:
-    """Convert ruamel containers to plain dict/list so callers never see ruamel."""
-    if isinstance(node, dict):
-        return {
-            str(k): _to_plain(v) for k, v in cast("dict[object, object]", node).items()
-        }
-    if isinstance(node, list):
-        return [_to_plain(v) for v in cast("list[object]", node)]
-    return node
