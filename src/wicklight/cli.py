@@ -73,24 +73,30 @@ def main_callback(
 
 @app.command()
 def check(
-    agent_file: Annotated[
-        Path, typer.Argument(help="Path to the agent file to validate.")
+    target: Annotated[
+        Path,
+        typer.Argument(help="Path to an agent file (.md) or deploy file (.yaml)."),
     ],
 ) -> None:
-    """Validate an agent file and print its effective config.
+    """Validate an agent or deploy file and print its effective settings.
 
-    Exits 0 when the file is valid, and non-zero (usable in CI) when it cannot
-    be read or has any validation error.
+    A ``.yaml``/``.yml`` file is treated as a deploy file (validated together
+    with its agent file); anything else is an agent file. Exits 0 when valid and
+    non-zero (usable in CI) on any read or validation error.
     """
     try:
-        text = agent_file.read_text(encoding="utf-8")
+        text = target.read_text(encoding="utf-8")
     except OSError as exc:
         message = exc.strerror or str(exc)
-        typer.echo(f"{agent_file}: {message}", err=True)
+        typer.echo(f"{target}: {message}", err=True)
         raise typer.Exit(code=1) from exc
 
+    if target.suffix in (".yaml", ".yml"):
+        _check_deploy(target, text)
+        return
+
     try:
-        agent, config = parse_and_validate(text, filename=agent_file.name)
+        agent, config = parse_and_validate(text, filename=target.name)
     except AgentFileValidationError as exc:
         for issue in exc.issues:
             typer.echo(issue.message, err=True)
@@ -107,6 +113,42 @@ def check(
     fatal |= _report_issues("routing", routing_issues(effective))
     if fatal:
         raise typer.Exit(code=1)
+
+
+def _check_deploy(path: Path, text: str) -> None:
+    """Validate a deploy file together with its agent file, and print it."""
+    from wicklight.deploy import (
+        build_effective_deployment,
+        parse_and_validate_deploy,
+        render_effective_deployment,
+    )
+    from wicklight.deploy.errors import DeployFileValidationError
+
+    try:
+        _deploy_file, config = parse_and_validate_deploy(text, filename=path.name)
+    except DeployFileValidationError as exc:
+        for issue in exc.issues:
+            typer.echo(issue.message, err=True)
+        raise typer.Exit(code=1) from exc
+
+    # Validate the referenced agent file too (resolved relative to the deploy file).
+    agent_path = path.parent / config.agent
+    try:
+        agent_text = agent_path.read_text(encoding="utf-8")
+        agent, _agent_config = parse_and_validate(agent_text, filename=agent_path.name)
+    except OSError as exc:
+        typer.echo(f"{path.name}: agent file not found: {config.agent}", err=True)
+        raise typer.Exit(code=1) from exc
+    except AgentFileValidationError as exc:
+        for issue in exc.issues:
+            typer.echo(issue.message, err=True)
+        raise typer.Exit(code=1) from exc
+
+    agent_name = str(agent.frontmatter.get("name")) if agent.frontmatter else None
+    effective = build_effective_deployment(
+        config, base_dir=path.parent, agent_name=agent_name
+    )
+    typer.echo(render_effective_deployment(effective))
 
 
 def _report_issues(heading: str, issues: list[PreflightIssue]) -> bool:

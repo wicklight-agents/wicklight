@@ -77,6 +77,8 @@ Topic guides live in [`docs/`](./docs):
 - [Replay, explain & dry-run](./docs/replay.md) — re-inspect a run offline.
 - [The local web viewer](./docs/viewer.md) — `wicklight view`, the browser UI
   for a run's timeline and step details.
+- [The deploy file](./docs/deploy-file.md) — `deploy.yaml`: triggers, secrets,
+  and egress, validated by `check`.
 - Providers: [credentials](./docs/credentials.md),
   [local models](./docs/local-models.md),
   [recorded HTTP](./docs/recorded-http.md),
