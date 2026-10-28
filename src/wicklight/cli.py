@@ -454,6 +454,50 @@ def _resolve_trace_target(target: str, runs_dir: Path) -> Path | None:
     return None
 
 
+@app.command()
+def deploy(
+    deploy_file: Annotated[
+        Path, typer.Argument(help="Path to the deploy.yaml to build an image for.")
+    ],
+    engine: Annotated[
+        str | None,
+        typer.Option("--engine", help="Container engine: docker or podman (auto)."),
+    ] = None,
+    print_dockerfile: Annotated[
+        bool,
+        typer.Option("--print-dockerfile", help="Print the generated build file."),
+    ] = False,
+) -> None:
+    """Build a locked-down container image for a deployment.
+
+    Generates the build file automatically (no Dockerfile to write) and builds a
+    hardened, non-root, shell-less image. ``--print-dockerfile`` just shows the
+    generated build file.
+    """
+    from wicklight.deploy.build import (
+        BuildError,
+        build_deployment,
+        generate_containerfile,
+    )
+    from wicklight.deploy.engine import EngineError
+    from wicklight.deploy.errors import DeployFileValidationError
+
+    try:
+        if print_dockerfile:
+            typer.echo(generate_containerfile(deploy_file))
+            return
+        result = build_deployment(deploy_file, engine=engine)
+    except DeployFileValidationError as exc:
+        for issue in exc.issues:
+            typer.echo(issue.message, err=True)
+        raise typer.Exit(code=1) from exc
+    except (BuildError, EngineError, AgentFileValidationError) as exc:
+        typer.echo(f"deploy failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"built {result.tag} with {result.engine}")
+
+
 providers_app = typer.Typer(
     name="providers", help="Inspect installed provider plugins.", no_args_is_help=True
 )

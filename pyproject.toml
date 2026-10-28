@@ -112,7 +112,13 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=wicklight --cov-report=term-missing"
+# Container (Docker/Podman) tests are slow and need an engine, so they are
+# deselected by default; run them with `pytest -m docker` (the deployment CI
+# job does, DTN-258).
+addopts = "-ra --cov=wicklight --cov-report=term-missing -m 'not docker'"
+markers = [
+    "docker: builds/runs a real container image (needs Docker or Podman)",
+]
 filterwarnings = [
     # Starlette's TestClient warns it uses httpx; we test the viewer through it
     # and this is not actionable for us.

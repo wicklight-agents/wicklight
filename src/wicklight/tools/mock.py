@@ -89,6 +89,7 @@ class _MockTool:
     def __init__(self, world: MockWorld) -> None:
         self._world = world
         self.network_hosts: list[str] = []
+        self.required_secrets: list[str] = []
 
     def is_sensitive(self, tool_input: BaseModel) -> bool:
         return False

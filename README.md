@@ -43,10 +43,11 @@ Prefer a bare `wicklight` command? Either activate the venv
 (`source .venv/bin/activate`) or install it as a tool
 (`uv tool install --editable .`).
 
-> `wicklight --help` lists every command: `check` (validate an agent file),
-> `run` (run an agent with full tracing), `trace show`, `replay` and `explain`
-> (inspect a past run offline), `view` (the local web viewer), and `providers`.
-> The guides below go deeper.
+> `wicklight --help` lists every command: `check` (validate an agent or deploy
+> file), `run` (run an agent with full tracing), `trace show`, `replay` and
+> `explain` (inspect a past run offline), `view` (the local web viewer),
+> `deploy` (build a locked-down container image), and `providers`. The guides
+> below go deeper.
 
 ## Examples
 

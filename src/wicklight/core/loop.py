@@ -515,6 +515,17 @@ async def run_agent(
     )
 
 
+def _tool_context(tool: Tool, ctx: ToolContext) -> ToolContext:
+    """A per-tool context carrying only the secrets the tool declared it needs.
+
+    Reads ``required_secrets`` defensively so a tool that omits it gets none
+    (DTN-255): a tool only ever sees the secrets it asked for.
+    """
+    required = list(getattr(tool, "required_secrets", []))
+    secrets = {name: ctx.secrets[name] for name in required if name in ctx.secrets}
+    return ToolContext(secrets=secrets, run_id=ctx.run_id)
+
+
 async def _handle_call(
     call: ToolCall,
     tools: Mapping[str, Tool],
@@ -582,10 +593,12 @@ async def _handle_call(
         )
         return result
 
-    # Execute the tool and record the result.
+    # Execute the tool and record the result. The tool is handed only the
+    # secrets it declared via `required_secrets` (DTN-255), never the whole set.
+    tool_ctx = _tool_context(tool, ctx)
     start = time.perf_counter()
     try:
-        result = await tool.run(tool_input, ctx)
+        result = await tool.run(tool_input, tool_ctx)
     except Exception as exc:  # noqa: BLE001 - a tool bug is surfaced to the model, not raised
         result = ToolResult.failure(f"tool {call.name} raised: {exc}")
     duration_ms = (time.perf_counter() - start) * 1000

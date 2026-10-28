@@ -100,6 +100,15 @@ class Tool(Protocol):
     @property
     def input_model(self) -> type[BaseModel]: ...
 
+    @property
+    def required_secrets(self) -> list[str]:
+        """Secret names this tool needs; only these are injected into its context.
+
+        Optional — a tool that declares none is handed no secrets (DTN-255). The
+        loop reads it defensively, so a tool that omits it entirely still works.
+        """
+        ...
+
     def is_sensitive(self, tool_input: BaseModel) -> bool: ...
 
     async def run(self, tool_input: BaseModel, ctx: ToolContext) -> ToolResult: ...
@@ -122,12 +131,14 @@ class FunctionTool:
         network_hosts: Iterable[str],
         sensitive: Sensitivity,
         input_model: type[BaseModel],
+        required_secrets: Iterable[str] = (),
     ) -> None:
         self._fn = fn
         self.name = name
         self.description = description
         self.risk = risk
         self.network_hosts = list(network_hosts)
+        self.required_secrets = list(required_secrets)
         self._sensitive = sensitive
         self.input_model = input_model
 
@@ -150,12 +161,15 @@ def tool(
     sensitive: Sensitivity,
     name: str | None = None,
     description: str | None = None,
+    required_secrets: Iterable[str] = (),
 ) -> Callable[[ToolFunction], FunctionTool]:
     """Turn an async function into a :class:`Tool`.
 
     ``risk``, ``network_hosts``, and ``sensitive`` are required declarations so
     the author makes a conscious choice (``[]`` and ``False`` are valid). The
     input schema is inferred from the first parameter's Pydantic annotation.
+    ``required_secrets`` names the secrets this tool needs; only those are handed
+    to it at run time (DTN-255).
     """
 
     def decorator(fn: ToolFunction) -> FunctionTool:
@@ -169,6 +183,7 @@ def tool(
             network_hosts=network_hosts,
             sensitive=sensitive,
             input_model=_infer_input_model(fn),
+            required_secrets=required_secrets,
         )
 
     return decorator
