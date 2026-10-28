@@ -116,6 +116,13 @@ The run ended. **Payload:** `status` (`completed`, `stopped`, `limit`, or
 `error`), `steps`, `cost_usd` (optional). *explain:* `run finished: completed in
 4 steps`
 
+### `egress_denied`
+A deployed run tried to reach a host outside its egress allowlist and the proxy
+refused it (DTN-254). **Payload:** `host`, `port`, `reason` (default `host not in
+egress allowlist`), `component` (which component attempted it, if known).
+Written by the egress proxy, so a blocked exfiltration attempt is visible.
+*explain:* `egress refused: evil.example:443 not in allowlist`
+
 ## Versioning
 
 `v` is the trace format version. It starts at `1` and is bumped only when the

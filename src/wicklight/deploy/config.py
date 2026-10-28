@@ -42,6 +42,10 @@ class EffectiveDeployment:
     secrets: list[SecretStatus]
     egress_extra_hosts: list[str]
     traces: str
+    # The full derived allowlist as (host, source) pairs, when it could be
+    # computed (needs the agent config + registries); otherwise None, and only
+    # the author's extra_hosts are shown.
+    egress_allowlist: list[tuple[str, str]] | None = None
 
 
 def build_effective_deployment(
@@ -50,6 +54,7 @@ def build_effective_deployment(
     base_dir: Path,
     agent_name: str | None = None,
     env: Mapping[str, str] | None = None,
+    egress_allowlist: list[tuple[str, str]] | None = None,
 ) -> EffectiveDeployment:
     """Resolve ``config`` for display. ``base_dir`` is the deploy file's folder."""
     environ = os.environ if env is None else env
@@ -64,6 +69,7 @@ def build_effective_deployment(
         ],
         egress_extra_hosts=list(config.egress.extra_hosts),
         traces=config.traces,
+        egress_allowlist=egress_allowlist,
     )
 
 
@@ -117,11 +123,21 @@ def render_effective_deployment(eff: EffectiveDeployment) -> str:
     else:
         lines.append("  none")
 
-    lines.extend(["", f"traces: {eff.traces}", "", "egress:"])
-    if eff.egress_extra_hosts:
-        lines.extend(f"  {host}" for host in eff.egress_extra_hosts)
+    lines.extend(["", f"traces: {eff.traces}", "", "egress allowlist:"])
+    if eff.egress_allowlist is not None:
+        if eff.egress_allowlist:
+            lines.extend(
+                f"  {host} ({source})" for host, source in eff.egress_allowlist
+            )
+        else:
+            lines.append("  none")
+        lines.append("  (every other host is refused and logged)")
     else:
-        lines.append("  no extra hosts")
-    lines.append("  (model-provider and tool hosts are added at deploy time)")
+        # No agent/registries available to derive hosts: show the extras only.
+        if eff.egress_extra_hosts:
+            lines.extend(f"  {host} (extra_hosts)" for host in eff.egress_extra_hosts)
+        else:
+            lines.append("  no extra hosts")
+        lines.append("  (model-provider and tool hosts are added at deploy time)")
 
     return "\n".join(lines)
