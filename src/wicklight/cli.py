@@ -135,7 +135,7 @@ def _check_deploy(path: Path, text: str) -> None:
     agent_path = path.parent / config.agent
     try:
         agent_text = agent_path.read_text(encoding="utf-8")
-        agent, _agent_config = parse_and_validate(agent_text, filename=agent_path.name)
+        agent, agent_config = parse_and_validate(agent_text, filename=agent_path.name)
     except OSError as exc:
         typer.echo(f"{path.name}: agent file not found: {config.agent}", err=True)
         raise typer.Exit(code=1) from exc
@@ -144,9 +144,16 @@ def _check_deploy(path: Path, text: str) -> None:
             typer.echo(issue.message, err=True)
         raise typer.Exit(code=1) from exc
 
+    from wicklight.deploy.egress import derive_allowlist
+
+    effective_agent = build_effective_config(agent_config, provided=agent.frontmatter)
+    allowlist = [
+        (entry.host, entry.source)
+        for entry in derive_allowlist(config, effective_agent)
+    ]
     agent_name = str(agent.frontmatter.get("name")) if agent.frontmatter else None
     effective = build_effective_deployment(
-        config, base_dir=path.parent, agent_name=agent_name
+        config, base_dir=path.parent, agent_name=agent_name, egress_allowlist=allowlist
     )
     typer.echo(render_effective_deployment(effective))
 

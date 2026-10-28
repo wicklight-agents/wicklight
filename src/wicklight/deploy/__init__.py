@@ -21,6 +21,12 @@ from wicklight.deploy.config import (
     render_effective_deployment,
 )
 from wicklight.deploy.dockerfile import render_containerfile
+from wicklight.deploy.egress import (
+    AllowedHost,
+    allowlist_hosts,
+    derive_allowlist,
+    host_allowed,
+)
 from wicklight.deploy.engine import EngineError, detect_engine
 from wicklight.deploy.errors import (
     DeployFileIssue,
@@ -29,6 +35,11 @@ from wicklight.deploy.errors import (
     parse_and_validate_deploy,
 )
 from wicklight.deploy.parser import DeployFile, DeployFileError, parse_deploy_file
+from wicklight.deploy.proxy import (
+    DeniedConnection,
+    EgressProxy,
+    trace_deny_writer,
+)
 from wicklight.deploy.schema import (
     DeployConfig,
     Egress,
@@ -45,8 +56,10 @@ from wicklight.deploy.secrets import (
 )
 
 __all__ = [
+    "AllowedHost",
     "BuildError",
     "BuildResult",
+    "DeniedConnection",
     "DeployConfig",
     "DeployFile",
     "DeployFileError",
@@ -54,6 +67,7 @@ __all__ = [
     "DeployFileValidationError",
     "EffectiveDeployment",
     "Egress",
+    "EgressProxy",
     "EngineError",
     "MissingSecretsError",
     "SecretResolutionError",
@@ -62,11 +76,14 @@ __all__ = [
     "SecretStatus",
     "TriggerSpec",
     "WebhookConfig",
+    "allowlist_hosts",
     "build_deployment",
     "build_effective_deployment",
     "check_deploy_path",
+    "derive_allowlist",
     "detect_engine",
     "generate_containerfile",
+    "host_allowed",
     "image_tag",
     "parse_and_validate_deploy",
     "parse_deploy_file",
@@ -74,4 +91,5 @@ __all__ = [
     "render_effective_deployment",
     "resolve_secrets",
     "secrets_for_tool",
+    "trace_deny_writer",
 ]

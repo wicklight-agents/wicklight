@@ -108,6 +108,11 @@ class OpenAIProvider:
         self._requires_key = requires_key
         self._chat_path = chat_path
 
+    @property
+    def base_url(self) -> str:
+        """The API base URL, used to derive the egress allowlist (DTN-254)."""
+        return self._base_url
+
     async def complete(self, request: ModelRequest) -> ModelResponse:
         body = request_body(request, stream=False)
         async with self._client() as client:

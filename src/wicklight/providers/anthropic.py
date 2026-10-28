@@ -111,6 +111,11 @@ class AnthropicProvider:
         self._timeout = timeout
         self._max_tokens = max_tokens
 
+    @property
+    def base_url(self) -> str:
+        """The API base URL, used to derive the egress allowlist (DTN-254)."""
+        return self._base_url
+
     async def complete(self, request: ModelRequest) -> ModelResponse:
         body = _request_body(request, self._max_tokens, stream=False)
         async with self._client() as client:

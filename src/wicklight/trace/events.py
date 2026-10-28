@@ -165,6 +165,16 @@ class RunFinishedPayload(_Payload):
     cost_usd: float | None = None
 
 
+class EgressDeniedPayload(_Payload):
+    # A connection to a host outside the egress allowlist was refused by the
+    # proxy (DTN-254). Recorded so a blocked exfiltration attempt is visible.
+    host: str
+    port: int
+    reason: str = "host not in egress allowlist"
+    # Which component attempted it, if known (often unknown for a denied host).
+    component: str | None = None
+
+
 # --- Event envelope -----------------------------------------------------------
 
 
@@ -243,6 +253,11 @@ class RunFinished(_EventBase):
     payload: RunFinishedPayload
 
 
+class EgressDenied(_EventBase):
+    type: Literal["egress_denied"] = "egress_denied"
+    payload: EgressDeniedPayload
+
+
 #: The discriminated union of every event type, keyed on ``type``.
 TraceEvent = Annotated[
     RunStarted
@@ -257,7 +272,8 @@ TraceEvent = Annotated[
     | ToolExecuted
     | LimitHit
     | ErrorEvent
-    | RunFinished,
+    | RunFinished
+    | EgressDenied,
     Field(discriminator="type"),
 ]
 

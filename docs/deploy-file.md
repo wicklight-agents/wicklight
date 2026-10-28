@@ -91,7 +91,28 @@ image, tagged `wicklight-<name>:<content-hash>`.
 
 ## Egress
 
-`egress.extra_hosts` lists hosts beyond what the agent already needs. The full
-allowlist — the agent's model-provider hosts and each tool's declared hosts,
-plus these extras — is assembled when the container is built and enforced by the
-egress proxy (M12, later milestones). Everything else is refused and logged.
+The agent container has **no direct route to the internet**; a small egress
+proxy running alongside it is the only way out. Its allowlist is derived
+automatically — never hand-maintained:
+
+- the **model-provider hosts** for every model the agent can route to (default,
+  routes, and fallback),
+- the **hosts each enabled tool declares** via `network_hosts`,
+- plus `egress.extra_hosts` from the deploy file.
+
+`wicklight check <deploy>.yaml` prints the full allowlist with each host's source:
+
+```
+egress allowlist:
+  api.anthropic.com (provider:anthropic)
+  hooks.example.com (tool:notify)
+  events.example.com (extra_hosts)
+  (every other host is refused and logged)
+```
+
+Allowed HTTPS connections are tunnelled straight through (`CONNECT`, no TLS
+interception). **Any other host is refused** with `403` and recorded as an
+`egress_denied` trace event (host, port, time) — something a plain firewall rule
+cannot do. The proxy sidecar runs `python -m wicklight.deploy.proxy`, configured
+with `WICKLIGHT_EGRESS_ALLOW`; wiring it onto an internal-only container network
+lands with the deployment run (later M12 tickets).
