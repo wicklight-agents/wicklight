@@ -101,6 +101,14 @@ class Egress(BaseModel):
     extra_hosts: list[str] = []
 
 
+class OverlapPolicy(str, Enum):
+    """What to do when a trigger fires while a run is already in progress."""
+
+    SKIP = "skip"  # drop the new trigger (the safe default)
+    QUEUE = "queue"  # run it after the current one finishes
+    ALLOW = "allow"  # run it concurrently
+
+
 class DeployConfig(BaseModel):
     """A validated deploy file."""
 
@@ -113,3 +121,5 @@ class DeployConfig(BaseModel):
     secrets: dict[str, SecretSpec] = {}
     traces: str = "./runs"
     egress: Egress = Egress()
+    # What to do when a trigger fires mid-run (DTN-256).
+    overlap: OverlapPolicy = OverlapPolicy.SKIP

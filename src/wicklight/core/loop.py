@@ -234,6 +234,7 @@ async def run_agent(
     dry_run: bool = False,
     dry_run_result: str = DRY_RUN_RESULT,
     on_event: Callable[[TraceEvent], None] | None = None,
+    trigger: str | None = None,
 ) -> RunResult:
     """Run an agent to completion, recording every step to the trace.
 
@@ -267,7 +268,7 @@ async def run_agent(
         RunStarted,
         0,
         f"run started for agent {config.name.value}",
-        RunStartedPayload(agent=config.name.value, dry_run=dry_run),
+        RunStartedPayload(agent=config.name.value, dry_run=dry_run, trigger=trigger),
     )
 
     # Preflight: fail before the first model call if the provider can't do what

@@ -82,6 +82,7 @@ class Agent:
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
         secrets: Mapping[str, str] | None = None,
+        trigger: str | None = None,
     ) -> RunResult:
         """Run the agent on ``task``, writing a trace and returning the result.
 
@@ -116,6 +117,7 @@ class Agent:
                 agent_file=self._agent_file,
                 on_event=on_event,
                 ctx=ToolContext(secrets=secret_map, run_id=run_id),
+                trigger=trigger,
             )
 
     def run(
@@ -134,6 +136,7 @@ class Agent:
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
         secrets: Mapping[str, str] | None = None,
+        trigger: str | None = None,
     ) -> RunResult:
         """Synchronous wrapper over :meth:`arun`.
 
@@ -158,6 +161,7 @@ class Agent:
                     run_id=run_id,
                     runs_dir=runs_dir,
                     secrets=secrets,
+                    trigger=trigger,
                 )
             )
 

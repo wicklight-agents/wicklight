@@ -1,0 +1,180 @@
+"""Host-side control of deployed agents (DTN-257).
+
+The host talks to a running deployment through the container engine and the
+shared trace volume: it starts the supervisor container, lists deployments
+(from container labels — Docker is the registry, so there is no separate state
+file), reads traces and pending approvals from the mounted volume, and uses
+``docker stop`` as the kill switch. This layer is Docker/Podman-first; a remote
+control plane for hosted platforms (ECS, Fly) is a clean follow-on.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+from wicklight.deploy.engine import EngineError, detect_engine
+from wicklight.deploy.supervisor import control_dir, triggers_dir
+
+# Container naming + labels that mark a container as a Wicklight deployment.
+_LABEL = "wicklight.deployment"
+_TRACES_LABEL = "wicklight.traces"
+_SUPERVISOR = ["-m", "wicklight.deploy.supervisor"]
+_RUNTIME_PYTHON = "/usr/bin/python3.11"
+
+
+class HostError(Exception):
+    """Raised for host-side control failures."""
+
+
+@dataclass(frozen=True)
+class Deployment:
+    """A deployed agent, as seen from the host."""
+
+    name: str
+    container: str
+    status: str
+    traces_dir: Path
+
+
+def container_name(name: str) -> str:
+    return f"wicklight-{name}"
+
+
+def start_supervisor(
+    *,
+    name: str,
+    image: str,
+    traces_dir: Path,
+    secrets_env: dict[str, str],
+    engine: str | None = None,
+    webhook_port: int | None = None,
+) -> str:
+    """Start the supervisor container for a deployment; returns its name."""
+    chosen = detect_engine(engine)
+    traces_dir = traces_dir.resolve()
+    traces_dir.mkdir(parents=True, exist_ok=True)
+    cname = container_name(name)
+
+    cmd = [
+        chosen,
+        "run",
+        "-d",
+        "--name",
+        cname,
+        "--label",
+        f"{_LABEL}={name}",
+        "--label",
+        f"{_TRACES_LABEL}={traces_dir}",
+        "--restart",
+        "unless-stopped",
+        "-v",
+        f"{traces_dir}:/app/runs",
+    ]
+    for key, value in secrets_env.items():
+        cmd += ["-e", f"{key}={value}"]
+    if webhook_port is not None:
+        cmd += ["-p", f"127.0.0.1:{webhook_port}:8000"]
+    cmd += ["--entrypoint", _RUNTIME_PYTHON, image, *_SUPERVISOR]
+
+    _run(cmd)
+    return cname
+
+
+def deployed_agents(*, engine: str | None = None) -> list[Deployment]:
+    """List Wicklight deployments known to the engine (running or stopped)."""
+    chosen = detect_engine(engine)
+    out = _run(
+        [
+            chosen,
+            "ps",
+            "-a",
+            "--filter",
+            f"label={_LABEL}",
+            "--format",
+            '{{.Names}}\t{{.Status}}\t{{.Label "' + _LABEL + '"}}'
+            '\t{{.Label "' + _TRACES_LABEL + '"}}',
+        ]
+    ).stdout
+    deployments: list[Deployment] = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        container, status, name, traces = [*line.split("\t"), "", "", "", ""][:4]
+        deployments.append(
+            Deployment(
+                name=name, container=container, status=status, traces_dir=Path(traces)
+            )
+        )
+    return deployments
+
+
+def find_deployment(name: str, *, engine: str | None = None) -> Deployment:
+    for deployment in deployed_agents(engine=engine):
+        if deployment.name == name:
+            return deployment
+    raise HostError(f"no deployment named {name!r}")
+
+
+def send_manual_trigger(traces_dir: Path, task: str) -> None:
+    """Drop a manual-trigger file the supervisor will pick up."""
+    from uuid import uuid4
+
+    folder = triggers_dir(traces_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{uuid4().hex[:12]}.json").write_text(
+        json.dumps({"task": task}), encoding="utf-8"
+    )
+
+
+def stop(name: str, *, engine: str | None = None, timeout: int = 10) -> None:
+    """The kill switch: SIGTERM the supervisor so it records a killed run."""
+    chosen = detect_engine(engine)
+    _run([chosen, "stop", "-t", str(timeout), container_name(name)])
+
+
+def undeploy(name: str, *, engine: str | None = None) -> None:
+    """Remove the container; traces are left on the host volume."""
+    chosen = detect_engine(engine)
+    _run([chosen, "rm", "-f", container_name(name)])
+
+
+def latest_trace(traces_dir: Path) -> Path | None:
+    """The most recently modified run trace in a deployment's traces dir."""
+    traces = sorted(
+        traces_dir.glob("run_*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    return traces[0] if traces else None
+
+
+def control_paths(traces_dir: Path) -> Path:
+    """The deployment's control directory (approvals, triggers)."""
+    return control_dir(traces_dir)
+
+
+def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise HostError(
+            f"`{' '.join(cmd)}` failed (exit {proc.returncode}):\n"
+            f"{proc.stderr or proc.stdout}"
+        )
+    return proc
+
+
+__all__ = [
+    "Deployment",
+    "EngineError",
+    "HostError",
+    "container_name",
+    "control_paths",
+    "deployed_agents",
+    "find_deployment",
+    "latest_trace",
+    "send_manual_trigger",
+    "start_supervisor",
+    "stop",
+    "undeploy",
+]

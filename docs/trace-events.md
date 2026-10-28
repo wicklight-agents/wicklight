@@ -36,8 +36,10 @@ Example line:
 Each section lists the payload fields and an example `explain`.
 
 ### `run_started`
-A run has begun. **Payload:** `agent` (name), `agent_file` (path, optional).
-*explain:* `run started for agent inbox-summarizer`
+A run has begun. **Payload:** `agent` (name), `agent_file` (path, optional),
+`trigger` (what started a deployed run: `manual`, `schedule`, or `webhook`;
+`None` for a direct run, DTN-256). *explain:* `run started for agent
+inbox-summarizer`
 
 ### `context_built`
 The context (instructions plus history) was assembled for a step. **Payload:**
@@ -113,8 +115,9 @@ are exhausted. A sensitivity deadend uses `where: "sensitivity"` (DTN-245).
 
 ### `run_finished`
 The run ended. **Payload:** `status` (`completed`, `stopped`, `limit`, or
-`error`), `steps`, `cost_usd` (optional). *explain:* `run finished: completed in
-4 steps`
+`error`), `steps`, `cost_usd` (optional), `reason` (optional — e.g. `killed` when
+the deployment kill switch stopped the run, DTN-257). *explain:* `run finished:
+completed in 4 steps`
 
 ### `egress_denied`
 A deployed run tried to reach a host outside its egress allowlist and the proxy

@@ -89,6 +89,43 @@ image, tagged `wicklight-<name>:<content-hash>`.
 > Building currently needs a Wicklight source checkout; once Wicklight is on
 > PyPI (the 0.1 release), the image will install it by version.
 
+## Running and controlling a deployment
+
+`wicklight deploy` builds the image **and starts it** — one long-lived
+*supervisor* container per agent that stays up between runs, hosts the webhook
+endpoint and the cron scheduler inside the sealed container, and runs each
+trigger as its own trace. Because it is the same image everywhere, it runs the
+same on your laptop (`docker run`) and on a hosted container service (ECS, Fly,
+Cloud Run). `--build-only` stops after the build.
+
+**Triggers** (each run records which one fired, in `run_started.trigger`):
+
+- **manual** — `wicklight trigger <name> "<task>"` starts a run now.
+- **schedule** — the cron expressions in `triggers`; the supervisor fires them
+  internally (minute granularity).
+- **webhook** — a `POST` to the webhook path starts a run with the request body
+  as the task; it requires a shared-secret token (`X-Wicklight-Token`,
+  `WICKLIGHT_WEBHOOK_TOKEN`) and is published to host loopback with
+  `--webhook-port`.
+
+When a trigger fires mid-run, the deploy file's `overlap` policy decides: `skip`
+(the default — drop it), `queue` (run it next), or `allow` (run concurrently).
+
+**Host control** (Docker/Podman-first; a remote control plane for ECS/Fly is a
+follow-on):
+
+| Command | What |
+| --- | --- |
+| `wicklight ps` | deployed agents, status, last run, pending approvals |
+| `wicklight logs <name>` | the deployment's latest run trace (the `run` renderer) |
+| `wicklight stop <name>` | the **kill switch** — stops the run now and records `run_finished` with reason `killed`; traces are kept |
+| `wicklight approve <name>` | resolve a deployed run's pending approvals from the terminal (requests time out to deny) |
+| `wicklight undeploy <name>` | remove the container; keep the traces |
+
+A deployed run has no terminal, so approvals cross the boundary as files in the
+shared trace volume: the run writes a request, `wicklight approve` writes the
+decision, and an unanswered request times out to a denial (fail closed).
+
 ## Egress
 
 The agent container has **no direct route to the internet**; a small egress
