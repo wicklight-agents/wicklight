@@ -7,6 +7,12 @@ harness holds secrets so the model never sees raw keys.
 
 from __future__ import annotations
 
+from wicklight.deploy.approvals import (
+    FileApprover,
+    PendingApproval,
+    pending_approvals,
+    resolve_approval,
+)
 from wicklight.deploy.build import (
     BuildError,
     BuildResult,
@@ -34,15 +40,18 @@ from wicklight.deploy.errors import (
     check_deploy_path,
     parse_and_validate_deploy,
 )
+from wicklight.deploy.host import Deployment, HostError
 from wicklight.deploy.parser import DeployFile, DeployFileError, parse_deploy_file
 from wicklight.deploy.proxy import (
     DeniedConnection,
     EgressProxy,
     trace_deny_writer,
 )
+from wicklight.deploy.schedule import cron_matches, next_fire
 from wicklight.deploy.schema import (
     DeployConfig,
     Egress,
+    OverlapPolicy,
     SecretSource,
     SecretSpec,
     TriggerSpec,
@@ -54,6 +63,7 @@ from wicklight.deploy.secrets import (
     resolve_secrets,
     secrets_for_tool,
 )
+from wicklight.deploy.supervisor import Supervisor, record_killed
 
 __all__ = [
     "AllowedHost",
@@ -65,30 +75,41 @@ __all__ = [
     "DeployFileError",
     "DeployFileIssue",
     "DeployFileValidationError",
+    "Deployment",
     "EffectiveDeployment",
     "Egress",
     "EgressProxy",
     "EngineError",
+    "FileApprover",
+    "HostError",
     "MissingSecretsError",
+    "OverlapPolicy",
+    "PendingApproval",
     "SecretResolutionError",
     "SecretSource",
     "SecretSpec",
     "SecretStatus",
+    "Supervisor",
     "TriggerSpec",
     "WebhookConfig",
     "allowlist_hosts",
     "build_deployment",
     "build_effective_deployment",
     "check_deploy_path",
+    "cron_matches",
     "derive_allowlist",
     "detect_engine",
     "generate_containerfile",
     "host_allowed",
     "image_tag",
+    "next_fire",
     "parse_and_validate_deploy",
     "parse_deploy_file",
+    "pending_approvals",
+    "record_killed",
     "render_containerfile",
     "render_effective_deployment",
+    "resolve_approval",
     "resolve_secrets",
     "secrets_for_tool",
     "trace_deny_writer",

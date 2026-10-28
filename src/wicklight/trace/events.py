@@ -56,6 +56,9 @@ class RunStartedPayload(_Payload):
     # True for a counterfactual replay against a changed agent file (DTN-238):
     # recorded model decisions re-checked under new rules, nothing executed.
     counterfactual: bool = False
+    # What started this run in a deployment (DTN-256): "manual", "schedule",
+    # "webhook", or None for a direct/local run.
+    trigger: str | None = None
 
 
 class ContextBuiltPayload(_Payload):
@@ -163,6 +166,9 @@ class RunFinishedPayload(_Payload):
     status: RunStatus
     steps: int
     cost_usd: float | None = None
+    # Why the run ended, when notable — e.g. "killed" for the deployment kill
+    # switch (DTN-257). None for an ordinary finish.
+    reason: str | None = None
 
 
 class EgressDeniedPayload(_Payload):

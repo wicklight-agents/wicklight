@@ -461,33 +461,56 @@ def _resolve_trace_target(target: str, runs_dir: Path) -> Path | None:
     return None
 
 
+_EngineOpt = Annotated[
+    str | None,
+    typer.Option("--engine", help="Container engine: docker or podman (auto)."),
+]
+
+
 @app.command()
 def deploy(
     deploy_file: Annotated[
-        Path, typer.Argument(help="Path to the deploy.yaml to build an image for.")
+        Path, typer.Argument(help="Path to the deploy.yaml to deploy.")
     ],
-    engine: Annotated[
-        str | None,
-        typer.Option("--engine", help="Container engine: docker or podman (auto)."),
-    ] = None,
+    engine: _EngineOpt = None,
     print_dockerfile: Annotated[
         bool,
         typer.Option("--print-dockerfile", help="Print the generated build file."),
     ] = False,
+    build_only: Annotated[
+        bool,
+        typer.Option("--build-only", help="Build the image but do not start it."),
+    ] = False,
+    webhook_port: Annotated[
+        int,
+        typer.Option("--webhook-port", help="Host loopback port for the webhook."),
+    ] = 0,
 ) -> None:
-    """Build a locked-down container image for a deployment.
+    """Build and start a locked-down container deployment.
 
-    Generates the build file automatically (no Dockerfile to write) and builds a
-    hardened, non-root, shell-less image. ``--print-dockerfile`` just shows the
-    generated build file.
+    Generates the build file automatically (no Dockerfile to write), builds a
+    hardened non-root, shell-less image, then starts the supervisor container
+    that handles this deployment's triggers. ``--build-only`` stops after the
+    build; ``--print-dockerfile`` just shows the generated build file.
     """
+    import os
+
+    from wicklight.deploy import host as hostctl
     from wicklight.deploy.build import (
         BuildError,
         build_deployment,
         generate_containerfile,
     )
     from wicklight.deploy.engine import EngineError
-    from wicklight.deploy.errors import DeployFileValidationError
+    from wicklight.deploy.errors import (
+        DeployFileValidationError,
+        parse_and_validate_deploy,
+    )
+    from wicklight.deploy.secrets import (
+        MissingSecretsError,
+        SecretResolutionError,
+        resolve_secrets,
+    )
 
     try:
         if print_dockerfile:
@@ -501,8 +524,176 @@ def deploy(
     except (BuildError, EngineError, AgentFileValidationError) as exc:
         typer.echo(f"deploy failed: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-
     typer.echo(f"built {result.tag} with {result.engine}")
+
+    if build_only:
+        return
+
+    _file, config = parse_and_validate_deploy(
+        deploy_file.read_text(encoding="utf-8"), filename=deploy_file.name
+    )
+    try:
+        secrets = resolve_secrets(config, base_dir=deploy_file.parent, env=os.environ)
+    except (MissingSecretsError, SecretResolutionError) as exc:
+        typer.echo(f"deploy failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    env = dict(secrets)
+    token = os.environ.get("WICKLIGHT_WEBHOOK_TOKEN")
+    if token:
+        env["WICKLIGHT_WEBHOOK_TOKEN"] = token
+    try:
+        name = hostctl.start_supervisor(
+            name=config.name,
+            image=result.tag,
+            traces_dir=deploy_file.parent / config.traces,
+            secrets_env=env,
+            engine=result.engine,
+            webhook_port=webhook_port or None,
+        )
+    except hostctl.HostError as exc:
+        typer.echo(f"deploy failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"started {name}")
+
+
+@app.command()
+def trigger(
+    name: Annotated[str, typer.Argument(help="Deployment name.")],
+    task: Annotated[str, typer.Argument(help="The task for this run.")],
+    engine: _EngineOpt = None,
+) -> None:
+    """Start a run in a deployed agent (a manual trigger)."""
+    from wicklight.deploy import host as hostctl
+
+    deployment = _find_deployment(name, engine)
+    hostctl.send_manual_trigger(deployment.traces_dir, task)
+    typer.echo(f"triggered {name}")
+
+
+@app.command()
+def ps(engine: _EngineOpt = None) -> None:
+    """List deployed agents, their status, last run, and pending approvals."""
+    from wicklight.deploy import host as hostctl
+    from wicklight.deploy.approvals import pending_approvals
+
+    try:
+        deployments = hostctl.deployed_agents(engine=engine)
+    except hostctl.EngineError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    if not deployments:
+        typer.echo("no deployments")
+        return
+
+    table = Table(title="Deployments")
+    for column in ("name", "status", "last run", "pending approvals"):
+        table.add_column(column)
+    for deployment in deployments:
+        last = hostctl.latest_trace(deployment.traces_dir)
+        pending = len(pending_approvals(hostctl.control_paths(deployment.traces_dir)))
+        table.add_row(
+            deployment.name,
+            deployment.status,
+            last.stem if last else "—",
+            str(pending) if pending else "—",
+        )
+    Console().print(table)
+
+
+@app.command()
+def logs(
+    name: Annotated[str, typer.Argument(help="Deployment name.")],
+    engine: _EngineOpt = None,
+) -> None:
+    """Show the deployment's most recent run trace (same renderer as run)."""
+    from wicklight.deploy import host as hostctl
+
+    deployment = _find_deployment(name, engine)
+    trace = hostctl.latest_trace(deployment.traces_dir)
+    if trace is None:
+        typer.echo("no runs yet")
+        return
+    print_trace(Console(), read_trace(trace))
+
+
+@app.command()
+def stop(
+    name: Annotated[str, typer.Argument(help="Deployment name.")],
+    engine: _EngineOpt = None,
+) -> None:
+    """Kill switch: stop the running agent; the kill is recorded in the trace."""
+    from wicklight.deploy import host as hostctl
+
+    try:
+        hostctl.stop(name, engine=engine)
+    except hostctl.HostError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"stopped {name}")
+
+
+@app.command()
+def approve(
+    name: Annotated[str, typer.Argument(help="Deployment name.")],
+    engine: _EngineOpt = None,
+) -> None:
+    """Resolve a deployed run's pending approvals from the terminal."""
+    import asyncio
+
+    from wicklight.core import TerminalApprover
+    from wicklight.core.approval import ApprovalRequest, Approved
+    from wicklight.deploy import host as hostctl
+    from wicklight.deploy.approvals import pending_approvals, resolve_approval
+
+    deployment = _find_deployment(name, engine)
+    control = hostctl.control_paths(deployment.traces_dir)
+    pending = pending_approvals(control)
+    if not pending:
+        typer.echo("no pending approvals")
+        return
+
+    approver = TerminalApprover()
+    for item in pending:
+        decision = asyncio.run(
+            approver.request(
+                ApprovalRequest(
+                    tool=item.tool,
+                    reason=item.reason,
+                    risk=item.risk,
+                    call_id=item.call_id,
+                )
+            )
+        )
+        approved = isinstance(decision, Approved)
+        note = "" if approved else getattr(decision, "note", "")
+        resolve_approval(control, item.call_id, approved=approved, note=note)
+
+
+@app.command()
+def undeploy(
+    name: Annotated[str, typer.Argument(help="Deployment name.")],
+    engine: _EngineOpt = None,
+) -> None:
+    """Remove a deployment's container; its traces are kept."""
+    from wicklight.deploy import host as hostctl
+
+    try:
+        hostctl.undeploy(name, engine=engine)
+    except hostctl.HostError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"undeployed {name} (traces kept)")
+
+
+def _find_deployment(name: str, engine: str | None):  # type: ignore[no-untyped-def]
+    from wicklight.deploy import host as hostctl
+
+    try:
+        return hostctl.find_deployment(name, engine=engine)
+    except (hostctl.HostError, hostctl.EngineError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
 
 providers_app = typer.Typer(
