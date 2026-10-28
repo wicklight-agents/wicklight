@@ -28,6 +28,7 @@ from wicklight.contracts import (
     ProviderError,
     ProviderRegistry,
     Tool,
+    ToolContext,
     ToolRegistry,
 )
 from wicklight.core import (
@@ -80,18 +81,25 @@ class Agent:
         on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
+        secrets: Mapping[str, str] | None = None,
     ) -> RunResult:
         """Run the agent on ``task``, writing a trace and returning the result.
 
         With ``dry_run=True`` tools are stubbed: calls that pass every check are
         recorded as "would have run" but never executed (DTN-240). For a routed
         agent, ``providers`` maps each routed model id to its provider.
+
+        ``secrets`` are values the harness holds and hands only to tools that
+        declare them via ``required_secrets`` (DTN-255); every value is also
+        redacted from the trace, so a secret can never be written to it.
         """
         run_id = run_id or f"run_{uuid4().hex[:12]}"
         provider_map, default_provider = self._resolve_providers(provider, providers)
         tool_map = self._resolve_tools(tools, world)
         configured_policies = self._resolve_policies(policies)
-        with TraceWriter(run_id, root=runs_dir, redactor=trace_redactor()) as writer:
+        secret_map = dict(secrets or {})
+        redactor = trace_redactor(extra_values=secret_map.values())
+        with TraceWriter(run_id, root=runs_dir, redactor=redactor) as writer:
             return await run_agent(
                 run_id=run_id,
                 instructions=self._agent_file.body,
@@ -107,6 +115,7 @@ class Agent:
                 dry_run=dry_run,
                 agent_file=self._agent_file,
                 on_event=on_event,
+                ctx=ToolContext(secrets=secret_map, run_id=run_id),
             )
 
     def run(
@@ -124,6 +133,7 @@ class Agent:
         on_event: Callable[[TraceEvent], None] | None = None,
         run_id: str | None = None,
         runs_dir: str | Path = "runs",
+        secrets: Mapping[str, str] | None = None,
     ) -> RunResult:
         """Synchronous wrapper over :meth:`arun`.
 
@@ -147,6 +157,7 @@ class Agent:
                     on_event=on_event,
                     run_id=run_id,
                     runs_dir=runs_dir,
+                    secrets=secrets,
                 )
             )
 

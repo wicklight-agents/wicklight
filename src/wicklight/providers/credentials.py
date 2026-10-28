@@ -74,11 +74,12 @@ def resolve_key(provider: str) -> str:
     return value
 
 
-def trace_redactor() -> Callable[[str], str]:
-    """A redactor for the trace writer: strips every set API key value and any
-    key-shaped string, so a credential can never be written to a trace.
+def trace_redactor(extra_values: Iterable[str] = ()) -> Callable[[str], str]:
+    """A redactor for the trace writer: strips every set API key value, any
+    ``extra_values`` (e.g. resolved deploy secrets, DTN-255), and any key-shaped
+    string, so a credential can never be written to a trace.
     """
     live_values = [
         value for env_var in KEY_ENV_VARS.values() if (value := os.environ.get(env_var))
     ]
-    return build_secret_redactor(live_values)
+    return build_secret_redactor([*live_values, *extra_values])

@@ -60,8 +60,34 @@ secret names where its value is resolved from on the host at start:
 - `from: keychain` — the OS keychain (`name`, defaulting to the key).
 
 `check` reports each as `set`, `MISSING`, or `deferred` (keychain, checked at
-start) — never the value. The harness later hands each secret only to the tools
-or providers that declare a need, and redaction keeps every value out of traces.
+start) — never the value. At run time the values are resolved on the host and
+injected into the container as **runtime environment**, never baked into the
+image. Inside, the harness holds them and hands each secret only to the tools
+that declare it via `required_secrets`; redaction keeps every value out of
+traces, even in error messages. A missing secret fails fast at start, naming
+every one.
+
+## Building the image
+
+`wicklight deploy` builds a locked-down container image for a deployment — no
+Dockerfile to write:
+
+```bash
+uv run wicklight deploy examples/deploy.yaml                 # build the image
+uv run wicklight deploy examples/deploy.yaml --print-dockerfile   # just show it
+uv run wicklight deploy examples/deploy.yaml --engine podman      # force an engine
+```
+
+It detects Docker or Podman (whichever is installed), then builds a two-stage
+image: dependencies are installed with `uv`, then copied into a hardened Google
+**distroless** runtime that has **no shell and no package manager**, runs as a
+**non-root** user, and is built to run with a **read-only root filesystem** (only
+the trace directory is a writable mount). The agent file and deploy file are
+baked in read-only; **secret values never are**. The image is a standard OCI
+image, tagged `wicklight-<name>:<content-hash>`.
+
+> Building currently needs a Wicklight source checkout; once Wicklight is on
+> PyPI (the 0.1 release), the image will install it by version.
 
 ## Egress
 
