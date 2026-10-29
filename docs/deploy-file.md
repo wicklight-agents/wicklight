@@ -5,6 +5,9 @@ which secrets it needs, where traces go, and any extra network hosts. It is kept
 separate from the agent file on purpose: the same `agent.md` runs unchanged
 locally and deployed, and the deploy file holds only the operational details.
 
+> For the end-to-end walkthrough and the architecture diagram, see
+> [Deploying an agent](./deploying.md). This page is the `deploy.yaml` reference.
+
 ```yaml
 name: inbox-summarizer
 agent: agent.md            # path to the agent file, relative to this file

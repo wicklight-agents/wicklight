@@ -97,10 +97,17 @@ class EgressProxy:
 
     def _deny(self, host: str, port: int) -> None:
         logger.info("egress: refused %s:%s (not in allowlist)", host, port)
-        if self._on_deny is not None:
+        if self._on_deny is None:
+            return
+        try:
             self._on_deny(
                 DeniedConnection(host=host, port=port, at=datetime.now(timezone.utc))
             )
+        except Exception:
+            # The connection is refused regardless; only the logging failed.
+            # Never let a logging error turn a deny into a dropped (un-refused)
+            # connection.
+            logger.exception("egress: failed to record a denied connection")
 
 
 async def _respond(writer: asyncio.StreamWriter, status: str) -> None:

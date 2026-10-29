@@ -485,13 +485,21 @@ def deploy(
         int,
         typer.Option("--webhook-port", help="Host loopback port for the webhook."),
     ] = 0,
+    no_egress_proxy: Annotated[
+        bool,
+        typer.Option(
+            "--no-egress-proxy",
+            help="Run without the sealed network + egress proxy (dev only).",
+        ),
+    ] = False,
 ) -> None:
     """Build and start a locked-down container deployment.
 
     Generates the build file automatically (no Dockerfile to write), builds a
-    hardened non-root, shell-less image, then starts the supervisor container
-    that handles this deployment's triggers. ``--build-only`` stops after the
-    build; ``--print-dockerfile`` just shows the generated build file.
+    hardened non-root, shell-less image, then starts the sealed topology: the
+    agent on an internal network with no direct internet route and an egress
+    proxy as the only way out. ``--build-only`` stops after the build;
+    ``--print-dockerfile`` just shows the generated build file.
     """
     import os
 
@@ -501,6 +509,7 @@ def deploy(
         build_deployment,
         generate_containerfile,
     )
+    from wicklight.deploy.egress import allowlist_hosts, derive_allowlist
     from wicklight.deploy.engine import EngineError
     from wicklight.deploy.errors import (
         DeployFileValidationError,
@@ -538,18 +547,28 @@ def deploy(
         typer.echo(f"deploy failed: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    # Derive the egress allowlist from the agent so the proxy knows what to allow.
+    agent_path = deploy_file.parent / config.agent
+    agent, agent_config = parse_and_validate(
+        agent_path.read_text(encoding="utf-8"), filename=agent_path.name
+    )
+    effective_agent = build_effective_config(agent_config, provided=agent.frontmatter)
+    allowlist = allowlist_hosts(derive_allowlist(config, effective_agent))
+
     env = dict(secrets)
     token = os.environ.get("WICKLIGHT_WEBHOOK_TOKEN")
     if token:
         env["WICKLIGHT_WEBHOOK_TOKEN"] = token
     try:
-        name = hostctl.start_supervisor(
+        name = hostctl.start_deployment(
             name=config.name,
             image=result.tag,
             traces_dir=deploy_file.parent / config.traces,
             secrets_env=env,
+            allowlist=allowlist,
             engine=result.engine,
             webhook_port=webhook_port or None,
+            egress_proxy=not no_egress_proxy,
         )
     except hostctl.HostError as exc:
         typer.echo(f"deploy failed: {exc}", err=True)

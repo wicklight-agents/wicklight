@@ -27,6 +27,43 @@ def _client(source: RunSource) -> TestClient:
     return TestClient(create_app(source))
 
 
+# --- a deployment trace opens in the viewer (DTN-258) -------------------------
+
+
+def test_deployment_trace_with_trigger_and_egress_opens(tmp_path: Path) -> None:
+    # A scheduled run records run_started.trigger; the egress proxy appends
+    # egress_denied events to the same trace. The viewer must load both.
+    from wicklight.deploy.proxy import DeniedConnection, trace_deny_writer
+
+    agent_file = tmp_path / "a.md"
+    agent_file.write_text(
+        "---\nname: sched\nmodels: { default: fake/x }\ntools: {}\n---\nGo.\n",
+        encoding="utf-8",
+    )
+    result = Agent.load(agent_file).run(
+        "scheduled run",
+        provider=FakeProvider(FakeScript.from_yaml("responses:\n  - text: done\n")),
+        world=MockWorld(),
+        trigger="schedule",
+        run_id="sched",
+        runs_dir=tmp_path,
+    )
+    # The proxy appends a refusal to the same trace file.
+    from datetime import datetime, timezone
+
+    trace_deny_writer(result.trace_path)(
+        DeniedConnection("evil.example", 443, datetime.now(timezone.utc))
+    )
+
+    client = _client(RunSource.from_path(result.trace_path))
+    body = client.get("/api/runs/sched/events").json()
+    types = [e["type"] for e in body["events"]]
+    assert "egress_denied" in types
+    started = next(e for e in body["events"] if e["type"] == "run_started")
+    assert started["payload"]["trigger"] == "schedule"
+    assert body["issues"] == []  # loaded cleanly, no parse errors
+
+
 # --- run list -----------------------------------------------------------------
 
 
