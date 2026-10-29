@@ -10,11 +10,14 @@ control plane for hosted platforms (ECS, Fly) is a clean follow-on.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from wicklight.deploy.approvals import approvals_dir
 from wicklight.deploy.engine import EngineError, detect_engine
 from wicklight.deploy.supervisor import control_dir, triggers_dir
 
@@ -44,6 +47,33 @@ class Deployment:
 
 def container_name(name: str) -> str:
     return f"wicklight-{name}"
+
+
+_OPEN_PERMS = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO  # 0o777
+
+
+def _prepare_traces_dir(traces_dir: Path) -> Path:
+    """Create the traces dir tree and make it writable by the container's uid.
+
+    The image runs as a fixed non-root user (65532), but a bind-mounted host
+    directory keeps host ownership — and on Linux (unlike Docker Desktop's
+    permissive mounts) that uid cannot write to a dir it does not own. The trace
+    mount is the one writable surface shared by the host and the container
+    (traces, egress log, triggers, and approvals), so we open its directories to
+    all users; the tree holds only this deployment's own files.
+    """
+    resolved = traces_dir.resolve()
+    # Pre-create the control subtree both sides write to, all world-writable.
+    for directory in (
+        resolved,
+        control_dir(resolved),
+        triggers_dir(resolved),
+        approvals_dir(control_dir(resolved)),
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+        with contextlib.suppress(OSError):
+            directory.chmod(_OPEN_PERMS)
+    return resolved
 
 
 def internal_network(name: str) -> str:
@@ -77,8 +107,7 @@ def start_deployment(
     via ``HTTPS_PROXY``. Denied hosts are refused and logged to the trace volume.
     """
     chosen = detect_engine(engine)
-    traces_dir = traces_dir.resolve()
-    traces_dir.mkdir(parents=True, exist_ok=True)
+    traces_dir = _prepare_traces_dir(traces_dir)
 
     if not egress_proxy:
         return start_supervisor(
@@ -158,8 +187,7 @@ def start_supervisor(
 ) -> str:
     """Start the supervisor container for a deployment; returns its name."""
     chosen = detect_engine(engine)
-    traces_dir = traces_dir.resolve()
-    traces_dir.mkdir(parents=True, exist_ok=True)
+    traces_dir = _prepare_traces_dir(traces_dir)
     cname = container_name(name)
 
     cmd = [
