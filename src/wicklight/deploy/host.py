@@ -22,7 +22,10 @@ from wicklight.deploy.supervisor import control_dir, triggers_dir
 _LABEL = "wicklight.deployment"
 _TRACES_LABEL = "wicklight.traces"
 _SUPERVISOR = ["-m", "wicklight.deploy.supervisor"]
+_PROXY = ["-m", "wicklight.deploy.proxy"]
 _RUNTIME_PYTHON = "/usr/bin/python3.11"
+_PROXY_PORT = 8080
+_EGRESS_TRACE = "/app/runs/egress.jsonl"
 
 
 class HostError(Exception):
@@ -43,6 +46,106 @@ def container_name(name: str) -> str:
     return f"wicklight-{name}"
 
 
+def internal_network(name: str) -> str:
+    return f"wicklight-int-{name}"
+
+
+def egress_network(name: str) -> str:
+    return f"wicklight-ext-{name}"
+
+
+def proxy_name(name: str) -> str:
+    return f"wicklight-proxy-{name}"
+
+
+def start_deployment(
+    *,
+    name: str,
+    image: str,
+    traces_dir: Path,
+    secrets_env: dict[str, str],
+    allowlist: list[str],
+    engine: str | None = None,
+    webhook_port: int | None = None,
+    egress_proxy: bool = True,
+) -> str:
+    """Start the sealed deployment topology and return the supervisor container.
+
+    With ``egress_proxy`` (the default), the agent runs on an **internal** network
+    with no direct internet route; an egress-proxy sidecar on both the internal
+    and an external network is the only way out, and the agent is pointed at it
+    via ``HTTPS_PROXY``. Denied hosts are refused and logged to the trace volume.
+    """
+    chosen = detect_engine(engine)
+    traces_dir = traces_dir.resolve()
+    traces_dir.mkdir(parents=True, exist_ok=True)
+
+    if not egress_proxy:
+        return start_supervisor(
+            name=name,
+            image=image,
+            traces_dir=traces_dir,
+            secrets_env=secrets_env,
+            engine=chosen,
+            webhook_port=webhook_port,
+        )
+
+    internal = internal_network(name)
+    external = egress_network(name)
+    _ensure_network(chosen, internal, internal=True)
+    _ensure_network(chosen, external, internal=False)
+
+    # The proxy: on the internal net (reachable by the agent) and the external
+    # net (its own route out). It logs refusals into the shared trace volume.
+    proxy = proxy_name(name)
+    _run(
+        [
+            chosen,
+            "run",
+            "-d",
+            "--name",
+            proxy,
+            "--label",
+            f"{_LABEL}={name}",
+            "--network",
+            internal,
+            "-v",
+            f"{traces_dir}:/app/runs",
+            "-e",
+            f"WICKLIGHT_EGRESS_ALLOW={','.join(allowlist)}",
+            "-e",
+            f"WICKLIGHT_EGRESS_PORT={_PROXY_PORT}",
+            "-e",
+            f"WICKLIGHT_EGRESS_TRACE={_EGRESS_TRACE}",
+            "--entrypoint",
+            _RUNTIME_PYTHON,
+            image,
+            *_PROXY,
+        ]
+    )
+    _run([chosen, "network", "connect", external, proxy])
+
+    # The agent: internal network only (no internet), routed through the proxy.
+    proxy_url = f"http://{proxy}:{_PROXY_PORT}"
+    supervisor_env = dict(secrets_env)
+    supervisor_env.update(
+        {
+            "HTTPS_PROXY": proxy_url,
+            "HTTP_PROXY": proxy_url,
+            "NO_PROXY": "localhost,127.0.0.1",
+        }
+    )
+    return start_supervisor(
+        name=name,
+        image=image,
+        traces_dir=traces_dir,
+        secrets_env=supervisor_env,
+        engine=chosen,
+        webhook_port=webhook_port,
+        network=internal,
+    )
+
+
 def start_supervisor(
     *,
     name: str,
@@ -51,6 +154,7 @@ def start_supervisor(
     secrets_env: dict[str, str],
     engine: str | None = None,
     webhook_port: int | None = None,
+    network: str | None = None,
 ) -> str:
     """Start the supervisor container for a deployment; returns its name."""
     chosen = detect_engine(engine)
@@ -73,6 +177,8 @@ def start_supervisor(
         "-v",
         f"{traces_dir}:/app/runs",
     ]
+    if network is not None:
+        cmd += ["--network", network]
     for key, value in secrets_env.items():
         cmd += ["-e", f"{key}={value}"]
     if webhook_port is not None:
@@ -81,6 +187,23 @@ def start_supervisor(
 
     _run(cmd)
     return cname
+
+
+def _ensure_network(engine: str, net: str, *, internal: bool) -> None:
+    """Create a network if it does not already exist (idempotent)."""
+    existing = subprocess.run(
+        [engine, "network", "inspect", net],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if existing.returncode == 0:
+        return
+    cmd = [engine, "network", "create"]
+    if internal:
+        cmd.append("--internal")
+    cmd.append(net)
+    _run(cmd)
 
 
 def deployed_agents(*, engine: str | None = None) -> list[Deployment]:
@@ -136,9 +259,18 @@ def stop(name: str, *, engine: str | None = None, timeout: int = 10) -> None:
 
 
 def undeploy(name: str, *, engine: str | None = None) -> None:
-    """Remove the container; traces are left on the host volume."""
+    """Remove the deployment's containers and networks; traces are kept."""
     chosen = detect_engine(engine)
-    _run([chosen, "rm", "-f", container_name(name)])
+    # Remove containers first, then their networks; each step is best-effort so a
+    # partially-created deployment still tears down cleanly.
+    for container in (container_name(name), proxy_name(name)):
+        _best_effort([chosen, "rm", "-f", container])
+    for net in (internal_network(name), egress_network(name)):
+        _best_effort([chosen, "network", "rm", net])
+
+
+def _best_effort(cmd: list[str]) -> None:
+    subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
 def latest_trace(traces_dir: Path) -> Path | None:
@@ -171,9 +303,13 @@ __all__ = [
     "container_name",
     "control_paths",
     "deployed_agents",
+    "egress_network",
     "find_deployment",
+    "internal_network",
     "latest_trace",
+    "proxy_name",
     "send_manual_trigger",
+    "start_deployment",
     "start_supervisor",
     "stop",
     "undeploy",

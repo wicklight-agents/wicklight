@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import signal
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -63,7 +63,13 @@ class Supervisor:
         text = deploy_path.read_text(encoding="utf-8")
         _file, self.config = parse_and_validate_deploy(text, filename=deploy_path.name)
         self.deploy_dir = deploy_path.parent
-        self.agent_path = deploy_path.parent / self.config.agent
+        # In the image the agent is baked as /app/agent.md regardless of the
+        # deploy file's `agent:` name, so honor WICKLIGHT_AGENT when set; locally
+        # fall back to resolving `agent:` relative to the deploy file.
+        agent_env = environ.get("WICKLIGHT_AGENT")
+        self.agent_path = (
+            Path(agent_env) if agent_env else deploy_path.parent / self.config.agent
+        )
         self.traces_dir = _resolve(deploy_path.parent, self.config.traces)
         self.secrets = resolve_secrets(
             self.config, base_dir=deploy_path.parent, env=environ
@@ -74,6 +80,12 @@ class Supervisor:
         self._runs: dict[str, tuple[asyncio.Task[Any], Path]] = {}
         self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
         self._stopping = asyncio.Event()
+        # Trigger files are dropped by the host into a bind-mounted volume, so the
+        # container (a different uid) may not be able to delete them — and host vs
+        # VM clocks can differ, so mtime is unreliable. We dedup on file name in
+        # memory and treat unlink as best-effort. (A rare un-deletable leftover
+        # could replay once after a restart; an acceptable trade for robustness.)
+        self._seen_triggers: set[str] = set()
 
     # --- lifecycle ------------------------------------------------------------
 
@@ -85,9 +97,9 @@ class Supervisor:
                 signal.SIGTERM, self._request_stop
             )
         tasks = [
-            asyncio.create_task(self._queue_worker()),
-            asyncio.create_task(self._watch_manual()),
-            asyncio.create_task(self._scheduler()),
+            asyncio.create_task(self._supervised(self._queue_worker, "queue")),
+            asyncio.create_task(self._supervised(self._watch_manual, "manual")),
+            asyncio.create_task(self._supervised(self._scheduler, "scheduler")),
         ]
         server = self._maybe_webhook_server(webhook_port)
         if server is not None:
@@ -102,6 +114,22 @@ class Supervisor:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _supervised(
+        self, coro_fn: Callable[[], Awaitable[None]], label: str
+    ) -> None:
+        """Run a loop task, logging any unexpected error instead of dying silently.
+
+        A background task that raises would otherwise stop processing with no
+        signal; logging makes such a failure visible (and the run keeps serving
+        its other sources).
+        """
+        try:
+            await coro_fn()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("supervisor: %s task failed", label)
 
     def _request_stop(self) -> None:
         logger.info("supervisor: SIGTERM received, stopping")
@@ -171,15 +199,30 @@ class Supervisor:
         folder = triggers_dir(self.traces_dir)
         while not self._stopping.is_set():
             for request in sorted(folder.glob("*.json")):
-                raw = request.read_text(encoding="utf-8")
-                request.unlink(missing_ok=True)
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError as exc:
-                    logger.warning("supervisor: bad manual trigger file: %s", exc)
+                if request.name in self._seen_triggers:
                     continue
-                await self.dispatch("manual", str(data.get("task", "")))
+                self._seen_triggers.add(request.name)
+                await self._consume_trigger(request)
             await asyncio.sleep(_MANUAL_POLL_SECONDS)
+
+    async def _consume_trigger(self, request: Path) -> None:
+        # Read before unlinking, and treat unlink as best-effort — a host-owned
+        # file on a bind mount may resist deletion by the container's (different)
+        # uid, which is why dedup relies on the seen-names set, not deletion.
+        try:
+            raw = request.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("supervisor: cannot read trigger file: %s", exc)
+            return
+        finally:
+            with contextlib.suppress(OSError):
+                request.unlink()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            logger.warning("supervisor: bad manual trigger file: %s", exc)
+            return
+        await self.dispatch("manual", str(data.get("task", "")))
 
     async def _scheduler(self) -> None:
         schedules = [t.schedule for t in self.config.triggers if t.schedule]

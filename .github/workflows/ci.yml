@@ -106,3 +106,51 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8799/api/runs | grep -q '"run_id"'
           curl -fsS http://127.0.0.1:8799/ | grep -q '<div id="app">'
+
+  deployment:
+    name: deployment (docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # ubuntu-latest ships Docker; build the image and run the sealed-deployment
+      # integration suite (hardening, egress refusal, secrets, kill switch).
+      - name: Deployment integration tests
+        run: uv run pytest -m docker
+
+  deployment-podman:
+    name: deployment (podman)
+    runs-on: ubuntu-latest
+    # Keep the required gate fast: run the same suite under Podman on a schedule
+    # and on main, not on every PR.
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Deployment integration tests (Podman)
+        env:
+          WICKLIGHT_TEST_ENGINE: podman
+        run: uv run pytest -m docker

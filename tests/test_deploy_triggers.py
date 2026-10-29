@@ -112,6 +112,49 @@ def test_record_killed_appends_a_killed_run_finished(tmp_path: Path) -> None:
     assert events[-1].payload.reason == "killed"
 
 
+class _HangingProvider:
+    """A provider whose model call never returns — stands in for a slow run."""
+
+    contract_version = "1.0"
+
+    def __init__(self) -> None:
+        from wicklight.contracts import Capabilities
+
+        self.capabilities = Capabilities(tool_calls=True)
+
+    async def complete(self, request: object) -> object:
+        await asyncio.Event().wait()  # block forever until cancelled
+        raise AssertionError("unreachable")
+
+    async def stream(self, request: object):  # pragma: no cover - unused
+        raise NotImplementedError
+        yield
+
+
+def test_stop_mid_run_kills_the_active_run_and_records_it(tmp_path: Path) -> None:
+    # A run is in flight (the model call is hanging); the kill switch stops it
+    # and records a killed run_finished — the DTN-257 done-when, deterministically.
+    sup = Supervisor(
+        _deploy(tmp_path), env={}, run_kwargs={"provider": _HangingProvider()}
+    )
+
+    async def go() -> list[str]:
+        run_id = sup._start_run("manual", "work")
+        for _ in range(20):  # let the run reach the hanging model call
+            if (tmp_path / "runs" / f"{run_id}.jsonl").exists():
+                break
+            await asyncio.sleep(0.05)
+        await sup._kill_active_runs()
+        trace = tmp_path / "runs" / f"{run_id}.jsonl"
+        return [e.type for e in read_trace(trace).events]
+
+    types = asyncio.run(go())
+    assert types[0] == "run_started"
+    assert types[-1] == "run_finished"  # the kill was recorded
+    # And no model response ever came back (the run was killed mid-call).
+    assert "model_responded" not in types
+
+
 # --- file approvals bridge the run to the host --------------------------------
 
 
