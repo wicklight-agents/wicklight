@@ -1,0 +1,72 @@
+site_name: Wicklight
+site_description: A small, observable, safe-by-default agent harness.
+site_url: https://wicklight-agents.github.io/wicklight/
+repo_url: https://github.com/wicklight-agents/wicklight
+repo_name: wicklight-agents/wicklight
+copyright: Apache-2.0
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.details
+
+# The local, untracked UAT doc is never part of the published site.
+exclude_docs: |
+  user-tests.md
+
+nav:
+  - Home: index.md
+  - Quickstart: getting-started.md
+  - Concepts:
+      - The loop: the-loop.md
+      - Safety model: safety-model.md
+      - Agent file reference: agent-file.md
+  - Safety features:
+      - Policies: policies.md
+      - Approvals & waivers: approvals.md
+      - Model routing: routing.md
+  - Debugging:
+      - Trace events: trace-events.md
+      - Replay, explain & dry-run: replay.md
+      - The viewer: viewer.md
+  - Providers:
+      - Credentials: credentials.md
+      - Local models: local-models.md
+      - Recorded HTTP: recorded-http.md
+      - Model types: model-types.md
+  - Plugins: plugins.md
+  - Deployment:
+      - Deploying an agent: deploying.md
+      - The deploy file: deploy-file.md
+  - Reference:
+      - Capabilities: capabilities.md
+      - Graduating: graduating.md
