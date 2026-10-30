@@ -1,0 +1,9 @@
+# Mock world for files.md: a couple of files under the allowed ./docs folder,
+# plus one outside it the agent must never be able to reach.
+files:
+  "docs/roadmap.txt": |
+    Q3 roadmap: ship the viewer, then deployment, then 0.1.
+  "docs/notes.txt": |
+    Remember to write the changelog before tagging.
+  "secrets/keys.txt": |
+    (outside the allowlist — paths_within must deny any read here)

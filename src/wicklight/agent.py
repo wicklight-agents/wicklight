@@ -66,6 +66,24 @@ class Agent:
     def name(self) -> str:
         return self._config.name.value
 
+    @property
+    def model_ids(self) -> list[str]:
+        """Every ``provider/model`` id this agent can route to.
+
+        The default model, each route target, and each fallback — de-duplicated,
+        default first. Useful for binding one fake provider to every model a
+        routed agent uses (``run --fake``).
+        """
+        models = self._config.models
+        seen: dict[str, None] = {}
+        for model_id in (
+            models.default.value,
+            *(route.use for route in models.routes.value),
+            *models.fallback.value,
+        ):
+            seen.setdefault(model_id, None)
+        return list(seen)
+
     async def arun(
         self,
         task: str,
