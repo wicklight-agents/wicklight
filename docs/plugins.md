@@ -30,8 +30,13 @@ model API. It declares its contract version and capabilities, and implements
 
 ```python
 from wicklight.contracts import (
-    Capabilities, ModelRequest, ModelResponse, StopReason, Usage,
+    Capabilities,
+    ModelRequest,
+    ModelResponse,
+    StopReason,
+    Usage,
 )
+
 
 class MyProvider:
     contract_version = "1.0"
@@ -59,14 +64,20 @@ The simplest form is an async function with the `@tool` decorator:
 from pydantic import BaseModel
 from wicklight.contracts import ToolContext, ToolResult, ToolRisk, tool
 
+
 class LookupInput(BaseModel):
     ticket_id: str
 
-@tool(risk=ToolRisk.READ, network_hosts=["api.tracker.example"],
-      sensitive=False, required_secrets=["TRACKER_TOKEN"])
+
+@tool(
+    risk=ToolRisk.READ,
+    network_hosts=["api.tracker.example"],
+    sensitive=False,
+    required_secrets=["TRACKER_TOKEN"],
+)
 async def lookup_ticket(inp: LookupInput, ctx: ToolContext) -> ToolResult:
     """Look up a support ticket."""
-    token = ctx.secret("TRACKER_TOKEN")      # only secrets the tool declared
+    token = ctx.secret("TRACKER_TOKEN")  # only secrets the tool declared
     ...
     return ToolResult.success("...")
 ```
@@ -83,6 +94,7 @@ config model (validated from the agent file) and a `check` method:
 
 ```python
 from wicklight.contracts.policy import ALLOW, PolicyCall, PolicyContext, deny
+
 
 class BusinessHoursOnly:
     name = "business_hours_only"
