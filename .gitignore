@@ -245,3 +245,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local demo agents (scratch; not part of the repo)
+demos/

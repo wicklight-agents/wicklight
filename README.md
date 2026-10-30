@@ -14,6 +14,9 @@ users to graduate to more advanced harnesses, carrying habits of tracing,
 testing, and least privilege with them. The same engine powers a companion web
 game that teaches agent safety hands-on.
 
+📖 **Documentation:** <https://wicklight-agents.github.io/wicklight/> — start
+with the [Quickstart](https://wicklight-agents.github.io/wicklight/getting-started/).
+
 ## Getting started
 
 Wicklight isn't on PyPI yet, so install from source. It uses
@@ -51,15 +54,20 @@ Prefer a bare `wicklight` command? Either activate the venv
 
 ## Examples
 
-Commented example agent files live in [`examples/`](./examples). Each teaches
-one concept and passes `wicklight check`:
+A curated set in [`examples/`](./examples), one agent per safety feature — each
+passes `wicklight check` and runs on the fake provider out of the box (no key):
 
-- [`inbox.md`](./examples/inbox.md) — read an inbox and draft replies; send
-  email only to a recipient allowlist, with approval.
-- [`files.md`](./examples/files.md) — read-only file access confined to a path
-  allowlist (least privilege).
-- [`payments.md`](./examples/payments.md) — an irreversible `make_payment` tool
-  behind an approval gate, plus a spend cap.
+| Example | Lesson |
+| --- | --- |
+| [`inbox.md`](./examples/inbox.md) | least privilege + a recipient allowlist, with approval |
+| `inbox.md` + injection | untrusted tagging + a policy block (the headline demo) |
+| [`payments.md`](./examples/payments.md) | approvals, a spend limit, and a documented waiver |
+| [`files.md`](./examples/files.md) | a path allowlist + a read-only tool |
+| [`routed.md`](./examples/routed.md) | model routing + sensitive data kept local |
+| [`deploy.yaml`](./examples/deploy.yaml) | a deployable agent (sealed container) |
+
+See [`examples/README.md`](./examples/README.md) for the full table and a
+run command for each.
 
 ```bash
 uv run wicklight check examples/payments.md
@@ -69,6 +77,10 @@ uv run wicklight check examples/payments.md
 
 Topic guides live in [`docs/`](./docs):
 
+- [Getting started](./docs/getting-started.md) — the guided tour: install, your
+  first run, the prompt-injection demo, and writing your own agent file.
+- [Capabilities](./docs/capabilities.md) — every feature in one inventory, with
+  how to observe each one. Doubles as a test-coverage checklist.
 - [The loop](./docs/the-loop.md) — the fixed agent loop and its safety stack.
 - [Trace events](./docs/trace-events.md) — the JSONL trace, event by event.
 - [Policies](./docs/policies.md) and [Approvals & waivers](./docs/approvals.md)

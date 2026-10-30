@@ -154,3 +154,41 @@ jobs:
         env:
           WICKLIGHT_TEST_ENGINE: podman
         run: uv run pytest -m docker
+
+  docs:
+    name: docs site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build the docs site
+        run: uv run --group docs mkdocs build --strict
+
+      - name: Upload the site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # Deploy the built site to GitHub Pages on merge to main. Needs the repo's
+  # Pages source set to "GitHub Actions" (Settings → Pages) — a one-time step.
+  deploy-docs:
+    name: deploy docs
+    needs: docs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

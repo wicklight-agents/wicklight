@@ -85,8 +85,8 @@ until the run finishes.
 
 The step-grouping and formatting logic lives in `src/lib/` (`steps.ts`,
 `format.ts`) as pure, unit-tested functions, and the components are kept
-self-contained, so the game's replay viewer can reuse them — see
-[`src/wicklight/viewer/frontend/README.md`](../src/wicklight/viewer/frontend/README.md).
+self-contained, so the game's replay viewer can reuse them — see the
+[frontend README](https://github.com/wicklight-agents/wicklight/blob/main/src/wicklight/viewer/frontend/README.md).
 
 ## Testing
 

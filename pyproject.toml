@@ -74,6 +74,11 @@ dev = [
     "pyright>=1.1.380",
     "pre-commit>=3.7",
 ]
+# The documentation site (DTN-259). Installed separately in the docs CI job;
+# not needed for the test/type/lint gate.
+docs = [
+    "mkdocs-material>=9.5",
+]
 
 [tool.hatch.version]
 path = "src/wicklight/__init__.py"
