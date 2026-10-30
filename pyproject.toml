@@ -51,6 +51,7 @@ local = "wicklight.providers.openai_compatible:OpenAICompatibleProvider"
 block_tools = "wicklight.policies.block_tools:BlockTools"
 email_only_to = "wicklight.policies.email_only_to:EmailOnlyTo"
 paths_within = "wicklight.policies.paths_within:PathsWithin"
+sender_denylist = "wicklight.policies.sender_denylist:SenderDenylist"
 spend_limit = "wicklight.policies.spend_limit:SpendLimit"
 
 # Example tools for the shipped example agents (world seeded from a file). They
