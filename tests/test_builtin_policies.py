@@ -11,9 +11,15 @@ from wicklight.contracts import (
     PolicyContext,
     PolicyRegistry,
 )
-from wicklight.policies import EmailOnlyTo, PathsWithin, SpendLimit
+from wicklight.policies import (
+    EmailOnlyTo,
+    PathsWithin,
+    SenderDenylist,
+    SpendLimit,
+)
 from wicklight.policies.email_only_to import EmailOnlyToConfig
 from wicklight.policies.paths_within import PathsWithinConfig
+from wicklight.policies.sender_denylist import SenderDenylistConfig
 from wicklight.policies.spend_limit import SpendLimitConfig
 from wicklight.testing import run_policy_conformance
 
@@ -169,9 +175,101 @@ def test_spend_limit_passes_conformance() -> None:
     ).assert_passed()
 
 
-# --- all three are discoverable from their entry points -----------------------
+# --- sender_denylist ----------------------------------------------------------
+
+
+def _denylist(entries: list[str]) -> SenderDenylist:
+    return SenderDenylist(SenderDenylistConfig(deny=entries))
+
+
+def _unsub(sender: str) -> PolicyCall:
+    return PolicyCall(tool="unsubscribe", arguments={"sender": sender})
+
+
+def test_sender_denylist_blocks_exact_address() -> None:
+    policy = _denylist(["alerts@mybank.com"])
+    decision = policy.check(_unsub("alerts@mybank.com"), CTX)
+    assert isinstance(decision, Deny)
+    assert "alerts@mybank.com" in decision.reason
+    assert isinstance(policy.check(_unsub("deals@shop.com"), CTX), Allow)
+
+
+def test_sender_denylist_blocks_whole_domain() -> None:
+    policy = _denylist(["@mybank.com"])
+    assert isinstance(policy.check(_unsub("marketing@mybank.com"), CTX), Deny)
+    assert isinstance(policy.check(_unsub("anyone@other.com"), CTX), Allow)
+
+
+def test_sender_denylist_blocks_subdomains() -> None:
+    # The inverse of email_only_to: a denylist that misses a subdomain fails
+    # open, and bulk senders routinely mail from one.
+    policy = _denylist(["@mybank.com"])
+    assert isinstance(policy.check(_unsub("deals@mail.mybank.com"), CTX), Deny)
+    assert isinstance(policy.check(_unsub("x@a.b.mybank.com"), CTX), Deny)
+
+
+def test_sender_denylist_does_not_match_lookalike_domains() -> None:
+    policy = _denylist(["@mybank.com"])
+    # Neither a suffix trick nor a prefix trick should match.
+    assert isinstance(policy.check(_unsub("x@notmybank.com"), CTX), Allow)
+    assert isinstance(policy.check(_unsub("x@mybank.com.evil.net"), CTX), Allow)
+
+
+def test_sender_denylist_match_is_case_insensitive() -> None:
+    policy = _denylist(["@MyBank.com"])
+    assert isinstance(policy.check(_unsub("DEALS@MYBANK.COM"), CTX), Deny)
+
+
+def test_sender_denylist_checks_every_sender_argument() -> None:
+    policy = _denylist(["@mybank.com"])
+    call = PolicyCall(tool="unsubscribe", arguments={"from": "x@mybank.com"})
+    assert isinstance(policy.check(call, CTX), Deny)
+
+
+def test_sender_denylist_checks_lists_of_senders() -> None:
+    policy = _denylist(["@mybank.com"])
+    call = PolicyCall(
+        tool="unsubscribe",
+        arguments={"sender": ["ok@shop.com", "alerts@mybank.com"]},
+    )
+    assert isinstance(policy.check(call, CTX), Deny)
+
+
+def test_sender_denylist_not_applicable_without_a_sender() -> None:
+    # Policies run against every proposed call; one with no sender argument is
+    # not this policy's concern.
+    policy = _denylist(["@mybank.com"])
+    assert isinstance(policy.check(PolicyCall(tool="read_inbox"), CTX), Allow)
+
+
+def test_sender_denylist_empty_config_allows_everything() -> None:
+    policy = _denylist([])
+    assert isinstance(policy.check(_unsub("anyone@anywhere.com"), CTX), Allow)
+
+
+def test_sender_denylist_bare_list_shorthand() -> None:
+    # The agent-file form `sender_denylist: ["@mybank.com"]`.
+    config = SenderDenylistConfig.model_validate(["@mybank.com"])
+    assert config.deny == ["@mybank.com"]
+
+
+def test_sender_denylist_passes_conformance() -> None:
+    run_policy_conformance(
+        SenderDenylist,
+        config={"deny": ["@mybank.com"]},
+        sample_call=_unsub("deals@shop.com"),
+        deny_call=_unsub("alerts@mybank.com"),
+    ).assert_passed()
+
+
+# --- all four are discoverable from their entry points ------------------------
 
 
 def test_builtin_policies_are_discoverable() -> None:
     names = set(PolicyRegistry.discover().names())
-    assert {"email_only_to", "paths_within", "spend_limit"} <= names
+    assert {
+        "email_only_to",
+        "paths_within",
+        "sender_denylist",
+        "spend_limit",
+    } <= names

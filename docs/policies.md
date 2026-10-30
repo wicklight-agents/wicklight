@@ -50,6 +50,7 @@ continues.
 | Policy | Applies to | Config | Blocks |
 | --- | --- | --- | --- |
 | `email_only_to` | calls with a recipient (`to`, `recipient`, …) | list of addresses/domains (`@acme.com` = whole domain, case-insensitive) | recipients not on the allowlist |
+| `sender_denylist` | calls with a sender (`sender`, `from`, …) | list of addresses/domains (`@acme.com` = that domain **and its subdomains**) | senders on the denylist |
 | `paths_within` | calls with a path (`path`, `file`, …) | list of root directories | paths resolving outside the roots (`..` and symlinks resolved first) |
 | `spend_limit` | calls with an amount (`amount_usd`, …) | `{ max_usd, per_call_usd }` | a payment over the per-call cap, or one that pushes the running total over `max_usd` |
 
@@ -62,6 +63,7 @@ call, so three small payments that together exceed the cap are blocked
 ```yaml
 policies:
   - email_only_to: ["@acme.com", "ceo@partner.com"]
+  - sender_denylist: ["@mybank.com", "alerts@myairline.com"]
   - paths_within: ["./docs"]
   - spend_limit: { max_usd: 100, per_call_usd: 50 }
 ```
@@ -69,6 +71,26 @@ policies:
 See `examples/inbox.md`, `examples/files.md`, and `examples/payments.md` for
 complete agent files. A minimal reference policy, `block_tools`, lives in
 `src/wicklight/policies/block_tools.py`.
+
+### Allowlists and denylists are not mirror images
+
+`email_only_to` and `sender_denylist` look symmetrical but handle subdomains
+differently, on purpose.
+
+For an **allowlist**, declining to match `x@mail.acme.com` against `@acme.com`
+fails *closed* — the call is blocked, which is the safe direction, and the
+author can add the subdomain explicitly if they meant to allow it.
+
+For a **denylist**, that same rule fails *open*: `@mybank.com` would not stop
+`deals@mail.mybank.com`, and bulk senders routinely mail from a subdomain. So a
+domain entry in `sender_denylist` matches the domain **and everything beneath
+it**. Lookalikes still don't match — `@mybank.com` blocks neither
+`x@notmybank.com` nor `x@mybank.com.evil.net`.
+
+A denylist also can only protect calls that *carry* a sender argument. Policies
+run against every proposed call, so one with no sender is allowed as "not
+applicable" — which means a tool has to take the sender as an argument for this
+policy to see it. A tool that resolves the sender internally is unprotected.
 
 ## The prompt-injection demo
 
