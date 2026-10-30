@@ -1,0 +1,19 @@
+# Scripted model for routed.md on the fake provider. One fake provider stands in
+# for every model, so the responses replay regardless of which model is chosen —
+# but the model_routed events still show the real routing decisions.
+#
+# What to look for in the trace (the model_routed line before each model call):
+#   step 1  routed to anthropic/claude-opus  by rule 1 (step=planning)
+#           -> planning goes to the bigger model; it reads the confidential file
+#   step 2  tool_executed read_file ... (sensitive)  -> the run latches sensitive
+#   step 2  routed to local/llama3.1  by rule 2 (data=sensitive)
+#           -> once sensitive data is in context, the run is pinned to the local
+#              model; the confidential revenue never goes to a hosted model.
+responses:
+  - tool_calls:
+      - name: read_file
+        arguments: { path: "revenue.txt" }
+
+  - text: >
+      Q3 revenue is up 18% quarter over quarter. I've kept this on the local
+      model since the file is confidential.

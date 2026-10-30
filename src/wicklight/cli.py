@@ -231,7 +231,12 @@ def run(
         typer.echo(f"{agent_file}: {exc.strerror or exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    provider = FakeProvider(FakeScript.from_path(fake)) if fake is not None else None
+    # Bind one fake provider to every model the agent can route to, so a routed
+    # (multi-model) example runs on the fake provider from the CLI too.
+    providers = None
+    if fake is not None:
+        fake_provider = FakeProvider(FakeScript.from_path(fake))
+        providers = dict.fromkeys(agent.model_ids, fake_provider)
     world_state = (
         MockWorld.from_yaml(world.read_text(encoding="utf-8"))
         if world is not None
@@ -245,7 +250,7 @@ def run(
     try:
         result = agent.run(
             task,
-            provider=provider,
+            providers=providers,
             world=world_state,
             approver=approver,
             dry_run=dry_run,

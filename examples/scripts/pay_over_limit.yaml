@@ -1,0 +1,20 @@
+# The scripted model tries to pay an invoice that exceeds the spend limit.
+#
+# What to look for in the trace:
+#   step 1  make_payment $150  -> BLOCKED by spend_limit (max_usd: 100), and the
+#           block happens BEFORE the approval gate — policies run first, so no
+#           approval is ever requested and nothing is paid.
+# The lesson: a per-run spend cap on an irreversible tool, enforced ahead of the
+# human approval. See pay_invoice.yaml for a within-cap payment that reaches the
+# approval prompt.
+responses:
+  - tool_calls:
+      - name: make_payment
+        arguments:
+          payee: "Acme Corp"
+          amount_usd: 150
+          memo: "Invoice #4200 (over the cap)"
+
+  - text: >
+      That $150 payment was over the $100 spend limit, so it was blocked before
+      any approval was requested. Nothing was paid.
