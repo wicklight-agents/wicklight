@@ -97,6 +97,12 @@ Topic guides live in [`docs/`](./docs):
   [recorded HTTP](./docs/recorded-http.md),
   [model types](./docs/model-types.md).
 
+## Releases
+
+Changes are recorded in [`CHANGELOG.md`](./CHANGELOG.md). Releases publish to
+PyPI via trusted publishing on a version tag; see
+[`RELEASING.md`](./RELEASING.md) for the process.
+
 ## Development
 
 The checks below (and CI) run through the same `uv`-managed environment created

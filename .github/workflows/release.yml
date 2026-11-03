@@ -1,0 +1,98 @@
+name: Release
+
+# Publish on a version tag. A release-candidate tag (vX.Y.ZrcN) is a dry run to
+# TestPyPI; a final tag (vX.Y.Z) publishes to PyPI after a manual approval.
+# Uses PyPI Trusted Publishing (OIDC) — no API tokens are stored.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check the tag matches the package version
+        # The package version is the single source of truth
+        # (src/wicklight/__init__.py). The tag's base version (rc/dev stripped)
+        # must match it, so a tag can never publish a mismatched version.
+        run: |
+          pkg=$(uv run python -c "import wicklight; print(wicklight.__version__)")
+          tag="${GITHUB_REF_NAME#v}"
+          base="${tag%%rc*}"
+          if [ "$base" != "$pkg" ]; then
+            echo "tag $GITHUB_REF_NAME (base $base) != package version $pkg" >&2
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME matches package version $pkg"
+
+      # The viewer assets are committed and ship in the wheel, so no Node build
+      # is needed here — uv build packages what is in the tree.
+      - name: Build sdist and wheel
+        run: uv build -o dist
+
+      - name: Smoke-check the wheel installs and runs
+        run: |
+          uv venv /tmp/rel-env
+          uv pip install --python /tmp/rel-env dist/*.whl
+          /tmp/rel-env/bin/wicklight --version
+
+      - name: Upload the distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    name: publish to TestPyPI (release candidate)
+    needs: build
+    if: contains(github.ref_name, 'rc')
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/wicklight/
+    permissions:
+      id-token: write # OIDC for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: publish to PyPI
+    needs: build
+    if: ${{ !contains(github.ref_name, 'rc') }}
+    runs-on: ubuntu-latest
+    # The `release` environment carries a required reviewer, so a real release
+    # pauses for a manual approval before publishing to PyPI.
+    environment:
+      name: release
+      url: https://pypi.org/project/wicklight/
+    permissions:
+      id-token: write # OIDC for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
