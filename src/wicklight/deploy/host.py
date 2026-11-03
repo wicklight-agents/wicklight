@@ -235,25 +235,35 @@ def _ensure_network(engine: str, net: str, *, internal: bool) -> None:
 
 
 def deployed_agents(*, engine: str | None = None) -> list[Deployment]:
-    """List Wicklight deployments known to the engine (running or stopped)."""
+    """List Wicklight deployments known to the engine (running or stopped).
+
+    Labels are read via ``inspect`` (``{{index .Config.Labels ...}}``) rather
+    than ``ps --format {{.Label ...}}``, because the latter is a Docker-only
+    template — Podman's ``ps`` reporter has no ``.Label`` method (DTN-272).
+    """
     chosen = detect_engine(engine)
-    out = _run(
-        [
-            chosen,
-            "ps",
-            "-a",
-            "--filter",
-            f"label={_LABEL}",
-            "--format",
-            '{{.Names}}\t{{.Status}}\t{{.Label "' + _LABEL + '"}}'
-            '\t{{.Label "' + _TRACES_LABEL + '"}}',
-        ]
-    ).stdout
+    names = _run(
+        [chosen, "ps", "-a", "--filter", f"label={_LABEL}", "--format", "{{.Names}}"]
+    ).stdout.split()
+
     deployments: list[Deployment] = []
-    for line in out.splitlines():
-        if not line.strip():
+    for container in names:
+        detail = _run(
+            [
+                chosen,
+                "inspect",
+                "--format",
+                f'{{{{index .Config.Labels "{_LABEL}"}}}}\t'
+                f'{{{{index .Config.Labels "{_TRACES_LABEL}"}}}}\t'
+                "{{.State.Status}}",
+                container,
+            ]
+        ).stdout.strip()
+        name, traces, status = [*detail.split("\t"), "", "", ""][:3]
+        # The egress-proxy sidecar carries the deployment label but no traces
+        # label; it is not a deployment entry of its own.
+        if not traces:
             continue
-        container, status, name, traces = [*line.split("\t"), "", "", "", ""][:4]
         deployments.append(
             Deployment(
                 name=name, container=container, status=status, traces_dir=Path(traces)
