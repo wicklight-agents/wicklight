@@ -46,8 +46,9 @@ deploy it as a locked-down container.
   shell-less container; `deploy.yaml` with triggers, runtime secrets held by the
   harness, and an auto-derived egress allowlist enforced by a proxy; host
   control CLI (`ps`, `logs`, `stop`, `approve`, `undeploy`).
-- **Release (M13).** A documentation site, curated example agents (one per
-  safety feature), a changelog, and trusted publishing to PyPI.
+- **Release (M13).** A documentation site; curated example agents (one per
+  safety feature) bundled in the wheel and copied out with `wicklight examples
+  --copy`; a changelog; and trusted publishing to PyPI.
 
 ### Known limitations
 

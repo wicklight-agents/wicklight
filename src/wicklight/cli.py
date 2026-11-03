@@ -193,6 +193,58 @@ def _render_api_keys(config: EffectiveConfig) -> str:
     return "\n".join(lines)
 
 
+def _bundled_examples_dir() -> Path:
+    """Where the example files live: bundled in the wheel, or the repo root."""
+    from importlib.resources import files
+
+    packaged = Path(str(files("wicklight").joinpath("_examples")))
+    if packaged.is_dir():
+        return packaged
+    # A source checkout (editable install) has no bundled copy; the examples are
+    # at the repo root (src/wicklight/cli.py -> parents[2]).
+    return Path(__file__).resolve().parents[2] / "examples"
+
+
+@app.command()
+def examples(
+    copy_to: Annotated[
+        Path | None,
+        typer.Option(
+            "--copy", help="Copy the example files into this directory and exit."
+        ),
+    ] = None,
+) -> None:
+    """List the bundled example agents, or copy them out with ``--copy``.
+
+    After ``pip install wicklight`` you have no ``examples/`` folder; this writes
+    the agents, scripts, and worlds so you can follow the quickstart:
+
+        wicklight examples --copy .
+        wicklight run examples/inbox.md "summarize my inbox" \\
+          --fake examples/scripts/summarize.yaml --world examples/worlds/inbox.yaml
+    """
+    import shutil
+
+    source = _bundled_examples_dir()
+    if not source.is_dir():
+        typer.echo("bundled examples are not available in this install.", err=True)
+        raise typer.Exit(code=1)
+
+    if copy_to is None:
+        for path in sorted(source.glob("*.md")):
+            if path.name.lower() != "readme.md":
+                typer.echo(path.name)
+        typer.echo("\nCopy them with: wicklight examples --copy <dir>")
+        return
+
+    dest = copy_to / "examples"
+    if dest.exists():
+        typer.echo(f"{dest} already exists; not overwriting.", err=True)
+        raise typer.Exit(code=1)
+    shutil.copytree(source, dest)
+    typer.echo(f"copied examples to {dest}")
+
+
 @app.command()
 def run(
     agent_file: Annotated[Path, typer.Argument(help="Path to the agent file.")],

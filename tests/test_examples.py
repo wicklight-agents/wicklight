@@ -12,9 +12,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
 from wicklight.agent import Agent
 from wicklight.agentfile import check_agent_path
+from wicklight.cli import app
 from wicklight.core import AutoApprove
 from wicklight.deploy import parse_and_validate_deploy
 from wicklight.providers import FakeProvider, FakeScript
@@ -22,6 +24,34 @@ from wicklight.tools import MockWorld
 from wicklight.trace import TraceEvent, read_trace
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
+runner = CliRunner()
+
+
+# --- `wicklight examples` ships the files for pip users (DTN-263) --------------
+
+
+def test_examples_command_lists_agents() -> None:
+    result = runner.invoke(app, ["examples"])
+    assert result.exit_code == 0
+    assert "inbox.md" in result.stdout
+    assert "routed.md" in result.stdout
+    assert "README.md" not in result.stdout  # the catalog README is not listed
+
+
+def test_examples_command_copies_the_tree(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["examples", "--copy", str(tmp_path)])
+    assert result.exit_code == 0
+    copied = tmp_path / "examples"
+    assert (copied / "inbox.md").is_file()
+    assert (copied / "scripts" / "injection.yaml").is_file()
+    assert (copied / "worlds" / "inbox.yaml").is_file()
+
+
+def test_examples_command_refuses_to_overwrite(tmp_path: Path) -> None:
+    (tmp_path / "examples").mkdir()
+    result = runner.invoke(app, ["examples", "--copy", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "already exists" in result.output
 
 
 # --- every example passes check -----------------------------------------------

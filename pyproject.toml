@@ -90,6 +90,13 @@ packages = ["src/wicklight"]
 # wheel, so a `pip install` needs no Node. See docs/viewer.md.
 exclude = ["src/wicklight/viewer/frontend"]
 
+# Ship the example agents, scripts, and worlds inside the package so a
+# `pip install` user can copy them out with `wicklight examples --copy` and
+# follow the quickstart without cloning the repo (DTN-260/DTN-263). They stay at
+# the repo root for development and tests; this just bundles them too.
+[tool.hatch.build.targets.wheel.force-include]
+"examples" = "wicklight/_examples"
+
 [tool.ruff]
 target-version = "py310"
 line-length = 88

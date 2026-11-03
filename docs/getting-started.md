@@ -10,22 +10,32 @@ trace without guessing.
 
 ## 1. Install
 
-Wicklight isn't on PyPI yet, so install from source. It uses
-[uv](https://docs.astral.sh/uv/), which downloads a suitable Python 3.10+ for
-you — that's the only prerequisite
-([install uv](https://docs.astral.sh/uv/getting-started/installation/)).
+Install from PyPI (Wicklight needs Python 3.10+):
+
+```bash
+pip install wicklight          # or: uv tool install wicklight
+wicklight --version            # 0.1.0
+```
+
+This guide uses the bundled example agents. A fresh install has no `examples/`
+folder yet, so copy them out once:
+
+```bash
+wicklight examples --copy .     # writes ./examples (agents, scripts, worlds)
+```
+
+Prefer to explore the whole project — examples, tests, and source together?
+Clone it instead:
 
 ```bash
 git clone https://github.com/wicklight-agents/wicklight.git
 cd wicklight
-uv sync                       # creates .venv and installs from uv.lock
-uv run wicklight --version    # 0.1.0
+uv sync                        # creates .venv and installs from uv.lock
 ```
 
-Every command below is prefixed with `uv run`, which uses that environment
-without activating it. If you'd rather type a bare `wicklight`, either activate
-the venv (`source .venv/bin/activate`) or install it as a tool
-(`uv tool install --editable .`).
+> The commands below are shown with the `uv run` prefix (the clone path). If you
+> installed with pip, drop it — type `wicklight check examples/inbox.md` instead
+> of `uv run wicklight check examples/inbox.md`.
 
 ## 2. The one idea
 
