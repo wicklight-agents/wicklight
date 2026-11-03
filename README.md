@@ -19,38 +19,33 @@ with the [Quickstart](https://wicklight-agents.github.io/wicklight/getting-start
 
 ## Getting started
 
-Wicklight isn't on PyPI yet, so install from source. It uses
-[uv](https://docs.astral.sh/uv/) for environment and dependency management —
-`uv` downloads a suitable Python 3.10+ automatically, so that's the only
-prerequisite ([install uv](https://docs.astral.sh/uv/getting-started/installation/)).
+Install from PyPI (Wicklight needs Python 3.10+):
 
 ```bash
-git clone https://github.com/wicklight-agents/wicklight.git
-cd wicklight
-uv sync                       # create .venv and install from uv.lock
+pip install wicklight          # or: uv tool install wicklight
+wicklight examples --copy .    # copy the example agents into ./examples
 ```
 
-Then run the CLI with `uv run` (no venv activation needed):
+Then try it, offline, on the fake provider (no API key):
 
 ```bash
-uv run wicklight --version              # 0.1.0
-uv run wicklight --help                 # list commands
-uv run wicklight check examples/inbox.md                 # validate an agent file
-uv run wicklight run examples/inbox.md "summarize my inbox" \
+wicklight --version                       # 0.1.0
+wicklight --help                          # list commands
+wicklight check examples/inbox.md         # validate an agent file
+wicklight run examples/inbox.md "summarize my inbox" \
   --fake examples/scripts/summarize.yaml \
-  --world examples/worlds/inbox.yaml --trace              # run it (offline, scripted)
-uv run wicklight view examples/sample.jsonl              # open a run in the web viewer
+  --world examples/worlds/inbox.yaml --trace   # run it (scripted, offline)
+wicklight view runs/<run-id>              # open the run in the web viewer
 ```
 
-Prefer a bare `wicklight` command? Either activate the venv
-(`source .venv/bin/activate`) or install it as a tool
-(`uv tool install --editable .`).
+Prefer to work from a clone (examples, tests, and source together)? `git clone`
+the repo and `uv sync`; then prefix the commands with `uv run`.
 
 > `wicklight --help` lists every command: `check` (validate an agent or deploy
 > file), `run` (run an agent with full tracing), `trace show`, `replay` and
 > `explain` (inspect a past run offline), `view` (the local web viewer),
-> `deploy` (build a locked-down container image), and `providers`. The guides
-> below go deeper.
+> `deploy` (build a locked-down container image), `examples`, and `providers`.
+> The guides below go deeper.
 
 ## Examples
 
