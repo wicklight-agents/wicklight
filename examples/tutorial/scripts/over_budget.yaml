@@ -1,0 +1,13 @@
+# The model proposes a cart that blows the $60 weekly budget. spend_limit blocks
+# it before anything is ordered; the model acknowledges and stops.
+responses:
+  - tool_calls:
+      - name: read_pantry
+  - tool_calls:
+      - name: order_groceries
+        arguments:
+          items: ["wagyu beef", "saffron", "truffle oil"]
+          amount_usd: 180.00
+  - text: >
+      That cart was $180, over the $60 budget, so it was blocked. Nothing was
+      ordered — I'll pick cheaper staples instead.
