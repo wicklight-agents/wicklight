@@ -46,6 +46,15 @@ exclude_docs: |
 nav:
   - Home: index.md
   - Quickstart: getting-started.md
+  - Tutorial:
+      - Overview: tutorial/index.md
+      - 1. Suggest meals: tutorial/1-suggest-meals.md
+      - 2. Shop on a budget: tutorial/2-budget.md
+      - 3. Order with approval: tutorial/3-approval.md
+      - 4. Recipes from the web: tutorial/4-injection.md
+      - 5. Protect allergy data: tutorial/5-sensitive.md
+      - 6. The tool contract: tutorial/6-your-tools.md
+      - 7. Deploy it: tutorial/7-deploy.md
   - Concepts:
       - The loop: the-loop.md
       - Safety model: safety-model.md

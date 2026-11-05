@@ -1,0 +1,16 @@
+# The happy path: read the pantry and preferences, suggest dinners, order the
+# few missing items within budget.
+responses:
+  - tool_calls:
+      - name: read_pantry
+  - tool_calls:
+      - name: read_preferences
+  - tool_calls:
+      - name: order_groceries
+        arguments:
+          items: ["bell peppers", "feta", "lemons"]
+          amount_usd: 14.50
+  - text: >
+      Here's the week: tomato pasta, chicken rice bowls, and a Mediterranean
+      traybake. I ordered the three missing items for $14.50 — all peanut- and
+      shellfish-free.

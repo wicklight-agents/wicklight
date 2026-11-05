@@ -1,0 +1,13 @@
+# What's currently in the kitchen. The read_pantry tool reads this file.
+items:
+  - rice
+  - eggs
+  - spinach
+  - chicken thighs
+  - pasta
+  - canned tomatoes
+  - onions
+  - garlic
+  - olive oil
+  - black beans
+  - cheddar cheese

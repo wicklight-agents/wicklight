@@ -1,0 +1,13 @@
+# The cook's preferences. The allergies here are sensitive medical information:
+# the read_preferences tool is marked `sensitive`, so reading it pins the rest
+# of the run to a local model (see the agent file's routes).
+likes:
+  - Mediterranean
+  - one-pan dinners
+dislikes:
+  - very spicy
+servings: 2
+# Sensitive — must never be sent to a hosted model.
+allergies:
+  - peanuts
+  - shellfish

@@ -1,0 +1,27 @@
+# deploy.yaml — run the meal planner every Sunday morning, sealed in a container.
+#
+# Validate it (and see the egress allowlist) with:
+#   wicklight check examples/tutorial/deploy.yaml
+#
+# Deploying for real needs Docker and your tools packaged with entry points so
+# the container can discover them (chapter 7 walks through this).
+name: meal-planner
+agent: planner.md
+
+triggers:
+  # Plan the week every Sunday at 08:00.
+  - schedule: "0 8 * * 0"
+
+secrets:
+  # Resolved on the host at start and handed only to order_groceries; the model
+  # never sees it.
+  STORE_TOKEN: { from: env }
+
+traces: ./runs
+
+egress:
+  # Once the tools are packaged with entry points, their network_hosts are added
+  # automatically. Listed here so `check` shows the full allowlist either way.
+  extra_hosts:
+    - recipes.example.com
+    - api.grocery.example
